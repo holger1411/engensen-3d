@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { Projection, hashNoise, type Vec2 } from "./geo";
 import type { FeatureCollection } from "./types";
+import type { TerrainSampler } from "./terrain";
 
 /** Wandelt einen projizierten 2D-Punkt (y=Nord) in Welt-XZ um (Norden → -Z). */
 const toWorld = (p: Vec2): THREE.Vector2 => new THREE.Vector2(p.x, -p.y);
@@ -16,8 +17,8 @@ const roadWidth = (t?: string) => ROAD_WIDTH[t || ""] ?? 4;
 const ROAD_COLOR = 0x40434a;
 const PATH_COLOR = 0x8a7a5c;
 
-/** Baut flache Straßenbänder aus LineStrings. */
-export function buildRoads(fc: FeatureCollection, proj: Projection): THREE.Group {
+/** Baut Straßenbänder aus LineStrings, auf das Gelände drapiert. */
+export function buildRoads(fc: FeatureCollection, proj: Projection, terrain: TerrainSampler): THREE.Group {
   const group = new THREE.Group();
   group.name = "roads";
 
@@ -35,8 +36,8 @@ export function buildRoads(fc: FeatureCollection, proj: Projection): THREE.Group
     emitRibbon(pts, half, target);
   }
 
-  if (positions.length) group.add(ribbonMesh(positions, ROAD_COLOR, 0.5, -4));
-  if (pathPositions.length) group.add(ribbonMesh(pathPositions, PATH_COLOR, 0.45, -3));
+  if (positions.length) group.add(ribbonMesh(positions, ROAD_COLOR, 0.5, -4, terrain));
+  if (pathPositions.length) group.add(ribbonMesh(pathPositions, PATH_COLOR, 0.45, -3, terrain));
   return group;
 }
 
@@ -60,7 +61,11 @@ function emitRibbon(pts: THREE.Vector2[], half: number, out: number[]): void {
 }
 const pushXZ = (out: number[], v: THREE.Vector2) => out.push(v.x, 0, v.y);
 
-function ribbonMesh(positions: number[], color: number, y: number, offset: number): THREE.Mesh {
+function ribbonMesh(positions: number[], color: number, y: number, offset: number, terrain: TerrainSampler): THREE.Mesh {
+  // Höhe pro Vertex aus dem Gelände sampeln, damit Straßen den Hügeln folgen.
+  for (let k = 0; k < positions.length; k += 3) {
+    positions[k + 1] = terrain.sample(positions[k], positions[k + 2]) + y;
+  }
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geom.computeVertexNormals();
@@ -69,7 +74,6 @@ function ribbonMesh(positions: number[], color: number, y: number, offset: numbe
     polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset,
   });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.y = y;
   mesh.renderOrder = 2;
   mesh.receiveShadow = true;
   return mesh;
@@ -86,8 +90,8 @@ const AREA_COLORS: Record<string, number> = {
   park: 0x7faa56, garden: 0x86b35a, water: 0x4a7fb0, heath: 0x9a8f5a,
 };
 
-/** Baut flache, eingefärbte Flächen aus Polygonen. Wasserwege werden ignoriert. */
-export function buildAreas(fc: FeatureCollection, proj: Projection): THREE.Group {
+/** Baut eingefärbte Flächen aus Polygonen, auf das Gelände drapiert. */
+export function buildAreas(fc: FeatureCollection, proj: Projection, terrain: TerrainSampler): THREE.Group {
   const group = new THREE.Group();
   group.name = "areas";
 
@@ -113,19 +117,25 @@ export function buildAreas(fc: FeatureCollection, proj: Projection): THREE.Group
     }
     geom.rotateX(Math.PI / 2); // Shape liegt in XY → in XZ-Ebene drehen
     const isWater = key === "water";
+    // Höhe pro Vertex aus dem Gelände + kleiner deterministischer Versatz gegen Z-Fighting.
+    const yOff = 0.05 + hashNoise(i * 2.3) * 0.4 + (isWater ? 0.2 : 0);
+    const pos = geom.attributes.position as THREE.BufferAttribute;
+    for (let v = 0; v < pos.count; v++) {
+      pos.setY(v, terrain.sample(pos.getX(v), pos.getZ(v)) + yOff);
+    }
+    pos.needsUpdate = true;
+    geom.computeVertexNormals();
+
     const mat = new THREE.MeshStandardMaterial({
       color,
       roughness: isWater ? 0.3 : 0.95,
       metalness: isWater ? 0.1 : 0,
       side: THREE.DoubleSide,
-      // Zieht die Fläche in der Tiefe konsistent über den Boden → kein Flimmern.
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
     });
     const mesh = new THREE.Mesh(geom, mat);
-    // Winziger deterministischer Höhen-Versatz bricht Koplanarität überlappender Flächen.
-    mesh.position.y = 0.05 + hashNoise(i * 2.3) * 0.4 + (isWater ? 0.2 : 0);
     mesh.renderOrder = 1;
     mesh.receiveShadow = true;
     group.add(mesh);
@@ -133,15 +143,4 @@ export function buildAreas(fc: FeatureCollection, proj: Projection): THREE.Group
   }
 
   return group;
-}
-
-/** Große Bodenplatte als Untergrund (etwas tiefer, damit Flächen klar darüber liegen). */
-export function buildGround(size = 3000): THREE.Mesh {
-  const geom = new THREE.PlaneGeometry(size, size);
-  geom.rotateX(-Math.PI / 2);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x8ea864, roughness: 1, metalness: 0 });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.y = -1.5;
-  mesh.receiveShadow = true;
-  return mesh;
 }

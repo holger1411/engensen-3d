@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { createScene } from "./scene";
 import { Projection } from "./geo";
 import { buildBuildings } from "./buildings";
-import { buildRoads, buildAreas, buildGround } from "./layers";
+import { buildRoads, buildAreas } from "./layers";
+import { makeTerrain, buildTerrainMesh, FLAT_TERRAIN, type TerrainData, type TerrainSampler } from "./terrain";
 import { InfoPanel } from "./infoPanel";
 import { Interaction } from "./interaction";
 import { initWeather } from "./weather";
@@ -44,12 +45,19 @@ async function main(): Promise<void> {
     const proj = new Projection(meta.center);
 
     setStatus("Baue Gelände …");
-    scene.add(buildGround());
-    scene.add(buildAreas(areasFC, proj));
-    scene.add(buildRoads(roadsFC, proj));
+    let terrain: TerrainSampler = FLAT_TERRAIN;
+    try {
+      const td = await loadJSON<TerrainData>("data/terrain.json");
+      terrain = makeTerrain(td, meta.center);
+    } catch (e) {
+      console.warn("Kein Gelände geladen, nutze flachen Boden:", (e as Error).message);
+    }
+    scene.add(buildTerrainMesh(terrain));
+    scene.add(buildAreas(areasFC, proj, terrain));
+    scene.add(buildRoads(roadsFC, proj, terrain));
 
     setStatus(`Baue ${meta.counts.buildings} Gebäude …`);
-    const { group, meshes } = buildBuildings(buildingsFC, proj);
+    const { group, meshes } = buildBuildings(buildingsFC, proj, terrain);
     scene.add(group);
 
     // Richte das Sonnen-Target auf das Zentrum

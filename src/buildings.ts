@@ -1,6 +1,7 @@
 import * as THREE from "three";
-import { Projection, hashNoise, ringArea, type Vec2 } from "./geo";
+import { Projection, hashNoise, ringArea, centroid, type Vec2 } from "./geo";
 import type { FeatureCollection, BuildingInfo } from "./types";
+import type { TerrainSampler } from "./terrain";
 
 const LEVEL_HEIGHT = 3; // m pro Stockwerk
 const MIN_FOOTPRINT_AREA = 4; // m² — winzige Artefakte verwerfen
@@ -170,7 +171,7 @@ export interface BuildingsResult {
  * Baut aus der Gebäude-FeatureCollection eine Gruppe extrudierter Meshes.
  * Jedes Gebäude ist ein eigenes Mesh (für Picking), trägt seine Info in userData.
  */
-export function buildBuildings(fc: FeatureCollection, proj: Projection): BuildingsResult {
+export function buildBuildings(fc: FeatureCollection, proj: Projection, terrain: TerrainSampler): BuildingsResult {
   const group = new THREE.Group();
   group.name = "buildings";
   const meshes: THREE.Mesh[] = [];
@@ -210,6 +211,9 @@ export function buildBuildings(fc: FeatureCollection, proj: Projection): Buildin
     });
 
     const mesh = new THREE.Mesh(geom, [roofMat, wallMat]);
+    // Auf die Geländehöhe des Schwerpunkts setzen (Welt-z = -Nord).
+    const c = centroid(projected[0]);
+    mesh.position.y = terrain.sample(c.x, -c.y) - 0.3; // leicht einsenken, kein Schweben
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.userData.info = buildingInfo(f.properties, cat, height);
