@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { createScene } from "./scene";
 import { Projection } from "./geo";
 import { buildBuildings } from "./buildings";
-import { buildRoads, buildAreas } from "./layers";
+import { buildRoads, buildAreas, buildDetails } from "./layers";
+import { buildPois } from "./poi";
 import { makeTerrain, buildTerrainMesh, FLAT_TERRAIN, type TerrainData, type TerrainSampler } from "./terrain";
 import { InfoPanel } from "./infoPanel";
 import { Interaction } from "./interaction";
@@ -63,6 +64,20 @@ async function main(): Promise<void> {
     setStatus(`Baue ${meta.counts.buildings} Gebäude …`);
     const { group, meshes } = buildBuildings(buildingsFC, proj, terrain);
     scene.add(group);
+
+    // Details (Bäume/Hecken) und POIs (Geschäfte/wichtige Punkte)
+    try {
+      const detailsFC = await loadJSON<FeatureCollection>("data/details.geojson");
+      scene.add(buildDetails(detailsFC, proj, terrain));
+    } catch (e) {
+      console.warn("Keine Details geladen:", (e as Error).message);
+    }
+    try {
+      const poisFC = await loadJSON<FeatureCollection>("data/pois.geojson");
+      scene.add(buildPois(poisFC, proj, terrain));
+    } catch (e) {
+      console.warn("Keine POIs geladen:", (e as Error).message);
+    }
 
     // Interaktion
     const panel = new InfoPanel();

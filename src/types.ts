@@ -2,8 +2,8 @@ export interface GeoFeature {
   type: "Feature";
   properties: Record<string, string | undefined>;
   geometry: {
-    type: "Polygon" | "LineString";
-    coordinates: number[][] | number[][][];
+    type: "Polygon" | "LineString" | "Point";
+    coordinates: number[] | number[][] | number[][][];
   };
 }
 

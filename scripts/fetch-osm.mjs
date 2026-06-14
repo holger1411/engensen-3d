@@ -16,7 +16,7 @@ const OUT_DIR = join(__dirname, "..", "public", "data");
 
 // Zentrum Engensen (Nominatim, OSM node 414161264)
 const CENTER = { lat: 52.5003028, lon: 9.9442798 };
-const RADIUS_M = 650; // Ortskern-Radius
+const RADIUS_M = 1200; // ganzer Ort inkl. Randbereiche
 
 const ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
@@ -36,16 +36,33 @@ const bbox = {
 const BBOX = `${bbox.south},${bbox.west},${bbox.north},${bbox.east}`;
 
 const QUERY = `
-[out:json][timeout:90];
+[out:json][timeout:120];
 (
   way["building"](${BBOX});
   relation["building"](${BBOX});
   way["highway"](${BBOX});
+  way["railway"](${BBOX});
   way["landuse"](${BBOX});
+  relation["landuse"](${BBOX});
   way["leisure"](${BBOX});
   way["natural"](${BBOX});
   relation["natural"](${BBOX});
+  way["amenity"="parking"](${BBOX});
   way["waterway"](${BBOX});
+  way["barrier"](${BBOX});
+  node["natural"="tree"](${BBOX});
+  node["shop"](${BBOX});
+  node["amenity"](${BBOX});
+  node["tourism"](${BBOX});
+  node["office"](${BBOX});
+  node["craft"](${BBOX});
+  node["healthcare"](${BBOX});
+  node["historic"](${BBOX});
+  node["leisure"](${BBOX});
+  way["shop"](${BBOX});
+  way["amenity"](${BBOX});
+  way["tourism"](${BBOX});
+  way["leisure"]["name"](${BBOX});
 );
 out geom tags;
 `;
@@ -128,13 +145,66 @@ const pick = (tags, keys) => {
 };
 
 // --- Klassifizierung & Konvertierung -----------------------------------------
+const POI_KEYS = ["shop", "amenity", "tourism", "office", "craft", "healthcare", "historic"];
+const SKIP_AMENITY = new Set([
+  "parking", "bench", "waste_basket", "recycling", "bicycle_parking", "vending_machine",
+  "bbq", "drinking_water", "fountain", "grit_bin", "parking_space", "shelter",
+  "hunting_stand", "parking_entrance", "bicycle_repair_station", "telephone", "clock",
+]);
+const NOTABLE_AMENITY = new Set([
+  "place_of_worship", "school", "kindergarten", "fire_station", "restaurant", "cafe",
+  "pub", "bar", "fast_food", "bank", "pharmacy", "fuel", "doctors", "dentist",
+  "post_office", "townhall", "community_centre", "hospital", "clinic", "library", "veterinary",
+]);
+
+/** Extrahiert einen POI (Geschäft / wichtiger Punkt) aus Node oder Way. */
+function makePoi(el, tags) {
+  let cat = null, val = null;
+  for (const k of POI_KEYS) if (tags[k]) { cat = k; val = tags[k]; break; }
+  if (!cat && tags.leisure && tags.name) { cat = "leisure"; val = tags.leisure; }
+  if (!cat) return null;
+  if (cat === "amenity" && SKIP_AMENITY.has(val)) return null;
+  // Unbenannte nur behalten, wenn es ein klar wichtiger Amenity-Typ ist
+  // (Feuerwehr etc.). Geschäfte/Tourismus/Historic ohne Namen werden verworfen.
+  const keepUnnamed = cat === "amenity" && NOTABLE_AMENITY.has(val);
+  if (!tags.name && !keepUnnamed) return null;
+
+  let lon, lat;
+  if (el.type === "node") { lon = el.lon; lat = el.lat; }
+  else if (el.bounds) { lon = (el.bounds.minlon + el.bounds.maxlon) / 2; lat = (el.bounds.minlat + el.bounds.maxlat) / 2; }
+  else if (el.geometry && el.geometry.length) { lon = el.geometry[0].lon; lat = el.geometry[0].lat; }
+  else return null;
+
+  return feature("Point", [lon, lat], { name: tags.name || "", cat, value: val });
+}
+
 function convert(osm) {
   const buildings = [];
   const roads = [];
   const areas = [];
+  const details = []; // Bäume (Point), Hecken/Mauern/Zäune (LineString)
+  const pois = [];
+  const poiSeen = new Set();
 
   for (const el of osm.elements) {
     const tags = el.tags || {};
+
+    // POIs (Geschäfte / wichtige Punkte) aus Nodes und Ways
+    const poi = makePoi(el, tags);
+    if (poi) {
+      // Dedup: benannte POIs nach Name, unbenannte nach Typ+Position
+      const key = poi.properties.name
+        ? `n:${poi.properties.name.toLowerCase()}`
+        : `${poi.properties.value}|${poi.geometry.coordinates[0].toFixed(3)}|${poi.geometry.coordinates[1].toFixed(3)}`;
+      if (!poiSeen.has(key)) { poiSeen.add(key); pois.push(poi); }
+    }
+
+    // Bäume → Punkt
+    if (el.type === "node" && tags.natural === "tree") {
+      details.push(feature("Point", [el.lon, el.lat], { kind: "tree" }));
+      continue;
+    }
+    if (el.type === "node") continue; // Nodes tragen sonst nur POIs/Bäume bei
 
     // Gebäude: geschlossene ways oder multipolygon-relations
     if (tags.building) {
@@ -145,10 +215,16 @@ function convert(osm) {
       continue;
     }
 
-    // Straßen / Wege: ways mit highway → LineString
-    if (el.type === "way" && tags.highway && el.geometry) {
+    // Barrieren (Hecke, Mauer, Zaun) → LineString
+    if (el.type === "way" && tags.barrier && el.geometry) {
+      details.push(feature("LineString", ring(el.geometry), { kind: "barrier", barrier: tags.barrier }));
+      continue;
+    }
+
+    // Straßen / Wege / Schienen → LineString
+    if (el.type === "way" && (tags.highway || tags.railway) && el.geometry) {
       roads.push(feature("LineString", ring(el.geometry), {
-        highway: tags.highway, name: tags.name,
+        highway: tags.highway, railway: tags.railway, name: tags.name,
       }));
       continue;
     }
@@ -158,6 +234,14 @@ function convert(osm) {
       areas.push(feature("LineString", ring(el.geometry), {
         kind: "waterway", waterway: tags.waterway, name: tags.name,
       }));
+      continue;
+    }
+
+    // Parkplätze → Fläche
+    if (tags.amenity === "parking") {
+      for (const coords of polygonsFromElement(el)) {
+        areas.push(feature("Polygon", coords, { kind: "amenity", value: "parking", name: tags.name }));
+      }
       continue;
     }
 
@@ -173,7 +257,7 @@ function convert(osm) {
     }
   }
 
-  return { buildings, roads, areas };
+  return { buildings, roads, areas, details, pois };
 }
 
 /** Liefert eine Liste von Polygon-Koordinaten ([ [ [lon,lat]... ] ]) für ein Element. */
@@ -208,22 +292,27 @@ const collection = (features) => ({ type: "FeatureCollection", features });
 // --- Hauptprogramm ------------------------------------------------------------
 async function main() {
   const osm = await fetchOverpass();
-  const { buildings, roads, areas } = convert(osm);
+  const { buildings, roads, areas, details, pois } = convert(osm);
 
   if (buildings.length === 0) {
     throw new Error("Keine Gebäude gefunden — Abbruch (Daten unbrauchbar).");
   }
-  console.log(`✓ Konvertiert: ${buildings.length} Gebäude, ${roads.length} Straßen, ${areas.length} Flächen`);
+  const trees = details.filter((d) => d.properties.kind === "tree").length;
+  console.log(`✓ Konvertiert: ${buildings.length} Gebäude, ${roads.length} Wege, ${areas.length} Flächen, ${details.length} Details (${trees} Bäume), ${pois.length} POIs`);
+  const named = pois.filter((p) => p.properties.name).slice(0, 20).map((p) => p.properties.name);
+  console.log(`  POI-Beispiele: ${named.join(", ")}`);
 
   await mkdir(OUT_DIR, { recursive: true });
   await writeFile(join(OUT_DIR, "buildings.geojson"), JSON.stringify(collection(buildings)));
   await writeFile(join(OUT_DIR, "roads.geojson"), JSON.stringify(collection(roads)));
   await writeFile(join(OUT_DIR, "areas.geojson"), JSON.stringify(collection(areas)));
+  await writeFile(join(OUT_DIR, "details.geojson"), JSON.stringify(collection(details)));
+  await writeFile(join(OUT_DIR, "pois.geojson"), JSON.stringify(collection(pois)));
   await writeFile(join(OUT_DIR, "meta.json"), JSON.stringify({
     center: CENTER, bbox, radius_m: RADIUS_M,
     generated: "build-time",
     source: "© OpenStreetMap contributors, ODbL 1.0",
-    counts: { buildings: buildings.length, roads: roads.length, areas: areas.length },
+    counts: { buildings: buildings.length, roads: roads.length, areas: areas.length, details: details.length, trees, pois: pois.length },
   }, null, 2));
 
   console.log(`✓ Geschrieben nach ${OUT_DIR}`);

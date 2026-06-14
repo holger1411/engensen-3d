@@ -88,6 +88,7 @@ const AREA_COLORS: Record<string, number> = {
   cemetery: 0x6f8a5f, recreation_ground: 0x7faa56, village_green: 0x86b35a,
   pitch: 0x5b9e5b, playground: 0xb88a4a, sports_centre: 0x5b9e5b,
   park: 0x7faa56, garden: 0x86b35a, water: 0x4a7fb0, heath: 0x9a8f5a,
+  parking: 0x9a9690, // Parkplatz
 };
 
 /** Baut eingefärbte Flächen aus Polygonen, auf das Gelände drapiert. */
@@ -143,4 +144,70 @@ export function buildAreas(fc: FeatureCollection, proj: Projection, terrain: Ter
   }
 
   return group;
+}
+
+// --- Details: Bäume & Barrieren (Hecken/Mauern/Zäune) ------------------------
+const BARRIER_STYLE: Record<string, { color: number; height: number; half: number }> = {
+  hedge: { color: 0x4f7a3a, height: 1.6, half: 0.5 },
+  wall: { color: 0x9a958c, height: 1.8, half: 0.35 },
+  fence: { color: 0x8a7a5c, height: 1.1, half: 0.15 },
+  retaining_wall: { color: 0x8f8a80, height: 1.4, half: 0.4 },
+};
+const barrierStyle = (b?: string) => BARRIER_STYLE[b || ""] ?? { color: 0x8a8a80, height: 1.2, half: 0.25 };
+
+/** Baut Bäume (Kegel) und Barrieren (niedrige vertikale Streifen) auf dem Gelände. */
+export function buildDetails(fc: FeatureCollection, proj: Projection, terrain: TerrainSampler): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "details";
+
+  const trunkGeom = new THREE.CylinderGeometry(0.28, 0.34, 2.2, 6);
+  const foliageGeom = new THREE.ConeGeometry(2.6, 5.5, 8);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 1 });
+  const foliageMat = new THREE.MeshStandardMaterial({ color: 0x4d7a3e, roughness: 0.95 });
+
+  for (const f of fc.features) {
+    if (f.geometry.type === "Point" && f.properties.kind === "tree") {
+      const c = f.geometry.coordinates as unknown as number[];
+      const p = proj.project(c[0], c[1]);
+      const base = terrain.sample(p.x, -p.y);
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+      trunk.position.y = 1.1;
+      trunk.castShadow = true;
+      const foliage = new THREE.Mesh(foliageGeom, foliageMat);
+      foliage.position.y = 4.6;
+      foliage.castShadow = true;
+      tree.add(trunk, foliage);
+      tree.position.set(p.x, base, -p.y);
+      group.add(tree);
+    } else if (f.geometry.type === "LineString" && f.properties.kind === "barrier") {
+      const style = barrierStyle(f.properties.barrier);
+      const pts = proj.projectRing(f.geometry.coordinates as number[][]).map(toWorld);
+      const mesh = barrierStrip(pts, style, terrain);
+      if (mesh) group.add(mesh);
+    }
+  }
+  return group;
+}
+
+/** Vertikaler Streifen entlang einer Linie (Hecke/Mauer/Zaun), auf Gelände. */
+function barrierStrip(pts: THREE.Vector2[], style: { color: number; height: number }, terrain: TerrainSampler): THREE.Mesh | null {
+  if (pts.length < 2) return null;
+  const pos: number[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const ya = terrain.sample(a.x, a.y);
+    const yb = terrain.sample(b.x, b.y);
+    const h = style.height;
+    pos.push(a.x, ya, a.y, a.x, ya + h, a.y, b.x, yb, b.y);
+    pos.push(b.x, yb, b.y, a.x, ya + h, a.y, b.x, yb + h, b.y);
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geom.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ color: style.color, roughness: 0.95, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }

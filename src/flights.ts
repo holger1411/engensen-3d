@@ -297,36 +297,20 @@ export class FlightLayer {
     this.selectedIcao = icao;
     this.buildTrajectory(obj.flight);
 
-    // Blickziel = Mittelpunkt zwischen Engensen und Flugzeug → beide im Bild,
-    // Engensen bleibt als Referenz sichtbar, die Sicht schwenkt klar zum Objekt.
-    const engensen = new THREE.Vector3(0, 0, 0);
-    const plane = obj.group.position.clone();
-    const toTarget = engensen.clone().lerp(plane, 0.5);
-
-    const dx = plane.x - engensen.x;
-    const dy = plane.y - engensen.y;
-    const dz = plane.z - engensen.z;
-    let horizDist = Math.hypot(dx, dz);
-    let hx = dx, hz = dz;
-    if (horizDist < 1) { hx = this.camera.position.x; hz = this.camera.position.z; horizDist = Math.hypot(hx, hz) || 1; }
-    hx /= horizDist; hz /= horizDist;
-    // Abstand so, dass Engensen↔Flugzeug komplett ins Bild passen
-    const span = Math.hypot(horizDist, dy);
-    const newD = THREE.MathUtils.clamp(span * 0.85, 1200, 26000);
-    const elev = THREE.MathUtils.clamp(Math.atan2(dy, horizDist) * 0.5 + 0.18, 0.12, 1.2);
-    const toCam = new THREE.Vector3(
-      toTarget.x - hx * Math.cos(elev) * newD,
-      toTarget.y + Math.sin(elev) * newD,
-      toTarget.z - hz * Math.cos(elev) * newD,
-    );
+    // Kamera bleibt EXAKT an ihrer Position; nur das Blickziel wird in Richtung
+    // des Flugzeugs gedreht. Der Orbit-Radius bleibt gleich → Steuerung normal.
+    const cam = this.camera.position.clone();
+    const dist = cam.distanceTo(this.controls.target);
+    const dir = obj.group.position.clone().sub(cam).normalize();
+    const toTarget = cam.clone().add(dir.multiplyScalar(dist));
 
     this.tween = {
       t: 0,
-      dur: 1.2,
+      dur: 1.0,
       fromTarget: this.controls.target.clone(),
       toTarget,
-      fromCam: this.camera.position.clone(),
-      toCam,
+      fromCam: cam, // unverändert
+      toCam: cam.clone(),
     };
   }
 

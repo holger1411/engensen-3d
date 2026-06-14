@@ -4,17 +4,20 @@
     "lon": 9.9442798
   },
   "bbox": {
-    "south": 52.49446377736256,
-    "west": 9.934688090382725,
-    "north": 52.50614182263744,
-    "east": 9.953871509617276
+    "south": 52.48952306590011,
+    "west": 9.926572028398876,
+    "north": 52.51108253409989,
+    "east": 9.961987571601124
   },
-  "radius_m": 650,
+  "radius_m": 1200,
   "generated": "build-time",
   "source": "© OpenStreetMap contributors, ODbL 1.0",
   "counts": {
-    "buildings": 737,
-    "roads": 213,
-    "areas": 55
+    "buildings": 900,
+    "roads": 308,
+    "areas": 90,
+    "details": 17,
+    "trees": 2,
+    "pois": 18
   }
 }
