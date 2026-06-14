@@ -126,7 +126,7 @@ export class FlightLayer {
   private timer: number | undefined;
   private tween: Tween | null = null;
   private selectedIcao: string | null = null;
-  private trajLine: THREE.Line | null = null;
+  private trajLine: THREE.Object3D | null = null;
   private trajMarker: THREE.Mesh | null = null;
 
   constructor(
@@ -233,22 +233,23 @@ export class FlightLayer {
     for (const f of flights) {
       seen.add(f.icao);
       let obj = this.planes.get(f.icao);
-      const color = f.military ? 0x7a8b3a : f.onGround ? 0x88909a : 0xffd23f;
+      const selected = f.icao === this.selectedIcao;
+      const color = selected ? 0x5fe0ff : f.military ? 0x7a8b3a : f.onGround ? 0x88909a : 0xffd23f;
       if (!obj) {
         const group = makePlane(color);
         group.add(makeLabel(f.callsign));
         this.root.add(group);
         obj = { group, flight: f };
         this.planes.set(f.icao, obj);
-      } else {
-        const mat = (obj.group.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
-        mat.color.setHex(color);
-        mat.emissive.setHex(color);
       }
+      const mat = (obj.group.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
+      mat.color.setHex(color);
+      mat.emissive.setHex(color);
+      mat.emissiveIntensity = selected ? 0.95 : 0.4;
       obj.flight = f;
       obj.group.position.copy(this.worldPos(f));
       obj.group.rotation.y = -(f.track * Math.PI) / 180;
-      obj.group.scale.setScalar(f.icao === this.selectedIcao ? PLANE_SCALE * 1.6 : PLANE_SCALE);
+      obj.group.scale.setScalar(selected ? PLANE_SCALE * 2.8 : PLANE_SCALE);
     }
     for (const [icao, obj] of this.planes) {
       if (!seen.has(icao)) {
@@ -297,20 +298,38 @@ export class FlightLayer {
     this.selectedIcao = icao;
     this.buildTrajectory(obj.flight);
 
-    // Kamera bleibt EXAKT an ihrer Position; nur das Blickziel wird in Richtung
-    // des Flugzeugs gedreht. Der Orbit-Radius bleibt gleich → Steuerung normal.
+    // Kamera bleibt EXAKT an ihrer Position; sie dreht sich horizontal UND
+    // vertikal direkt zum Flugzeug. Damit OrbitControls die Kamera beim
+    // Hochschauen nicht verschiebt, wird die Polarwinkel-Grenze aufgehoben
+    // (beim Reset wieder gesetzt).
+    this.controls.maxPolarAngle = Math.PI;
     const cam = this.camera.position.clone();
-    const dist = cam.distanceTo(this.controls.target);
     const dir = obj.group.position.clone().sub(cam).normalize();
-    const toTarget = cam.clone().add(dir.multiplyScalar(dist));
+    const R = this.controls.target.distanceTo(cam) || 400;
+    const toTarget = cam.clone().add(dir.multiplyScalar(R));
 
     this.tween = {
       t: 0,
-      dur: 1.0,
+      dur: 0.9,
       fromTarget: this.controls.target.clone(),
       toTarget,
       fromCam: cam, // unverändert
       toCam: cam.clone(),
+    };
+  }
+
+  /** Bringt die Kamera in die Ausgangsposition zurück und hebt die Auswahl auf. */
+  resetView(homePos: THREE.Vector3, homeTarget: THREE.Vector3): void {
+    this.selectedIcao = null;
+    this.clearTrajectory();
+    this.controls.maxPolarAngle = Math.PI / 2.02; // Limit wiederherstellen (kein Blick unter den Horizont)
+    this.tween = {
+      t: 0,
+      dur: 0.9,
+      fromTarget: this.controls.target.clone(),
+      toTarget: homeTarget.clone(),
+      fromCam: this.camera.position.clone(),
+      toCam: homePos.clone(),
     };
   }
 
@@ -327,9 +346,12 @@ export class FlightLayer {
       const y = Math.max(4, start.y + f.vertRateMs * t);
       pts.push(new THREE.Vector3(start.x + east, y, start.z - north));
     }
-    const geom = new THREE.BufferGeometry().setFromPoints(pts);
-    const mat = new THREE.LineBasicMaterial({ color: 0x35d0ff, transparent: true, opacity: 0.9 });
-    this.trajLine = new THREE.Line(geom, mat);
+    // Dicker, leuchtender Schlauch statt dünner Linie → deutlich sichtbar.
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const tube = new THREE.TubeGeometry(curve, Math.max(16, pts.length * 2), 24, 8, false);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x4fd8ff, transparent: true, opacity: 0.85, depthWrite: false });
+    this.trajLine = new THREE.Mesh(tube, mat);
+    this.trajLine.renderOrder = 6;
     this.root.add(this.trajLine);
 
     // Marker am dichtesten Punkt zu Engensen (wenn Überflug wahrscheinlich)
@@ -340,10 +362,11 @@ export class FlightLayer {
       const cy = p.y + Math.cos(rad) * f.velocityMs * of.etaSec;
       const yc = Math.max(4, start.y + f.vertRateMs * of.etaSec);
       const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(60, 16, 12),
-        new THREE.MeshBasicMaterial({ color: 0x35d0ff, transparent: true, opacity: 0.8 }),
+        new THREE.SphereGeometry(120, 18, 14),
+        new THREE.MeshBasicMaterial({ color: 0x6fe8ff, transparent: true, opacity: 0.85, depthWrite: false }),
       );
       marker.position.set(cx, yc, -cy);
+      marker.renderOrder = 6;
       this.root.add(marker);
       this.trajMarker = marker;
     }
@@ -352,8 +375,9 @@ export class FlightLayer {
   private clearTrajectory(): void {
     if (this.trajLine) {
       this.root.remove(this.trajLine);
-      this.trajLine.geometry.dispose();
-      (this.trajLine.material as THREE.Material).dispose();
+      const m = this.trajLine as THREE.Mesh;
+      m.geometry?.dispose();
+      (m.material as THREE.Material)?.dispose();
       this.trajLine = null;
     }
     if (this.trajMarker) {

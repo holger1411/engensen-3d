@@ -38,6 +38,8 @@ async function main(): Promise<void> {
   const container = document.getElementById("app")!;
   const bundle = createScene(container);
   const { renderer, scene, camera, controls } = bundle;
+  const homePos = camera.position.clone();
+  const homeTarget = controls.target.clone();
 
   try {
     setStatus("Lade Geodaten …");
@@ -96,6 +98,10 @@ async function main(): Promise<void> {
     clouds.start();
     const flights = new FlightLayer(scene, proj, meta, camera, controls);
     flights.start();
+
+    document.getElementById("reset-view")?.addEventListener("click", () => {
+      flights.resetView(homePos, homeTarget);
+    });
 
     // Statistik unten links
     const stats = document.getElementById("stats");
