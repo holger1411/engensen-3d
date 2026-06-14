@@ -7,8 +7,10 @@ import { makeTerrain, buildTerrainMesh, FLAT_TERRAIN, type TerrainData, type Ter
 import { InfoPanel } from "./infoPanel";
 import { Interaction } from "./interaction";
 import { initWeather } from "./weather";
+import { initAir } from "./air";
 import { FlightLayer } from "./flights";
 import { SolarSky } from "./sky";
+import { CloudSystem } from "./clouds";
 import type { FeatureCollection, Meta } from "./types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -69,6 +71,9 @@ async function main(): Promise<void> {
     // Live-Layer: Sonnenstand/Himmel, Wetter, Flüge
     new SolarSky(bundle, meta.center).start();
     initWeather(meta.center);
+    initAir(meta.center);
+    const clouds = new CloudSystem(scene, meta.center);
+    clouds.start();
     const flights = new FlightLayer(scene, proj, meta);
     flights.start();
 
@@ -87,6 +92,7 @@ async function main(): Promise<void> {
       const dt = clock.getDelta();
       controls.update();
       flights.update(dt);
+      clouds.update(dt);
       renderer.render(scene, camera);
     }
     animate();
