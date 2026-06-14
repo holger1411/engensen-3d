@@ -123,6 +123,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 export class FlightLayer {
   private root = new THREE.Group();
   private planes = new Map<string, PlaneObj>();
+  private typeCache = new Map<string, string>(); // icao → "Hersteller Typ (Kennung)"
   private interval = BASE_INTERVAL;
   private timer: number | undefined;
   private bbox: { lamin: number; lomin: number; lamax: number; lomax: number };
@@ -279,6 +280,12 @@ export class FlightLayer {
       cs.className = "fl-callsign";
       cs.textContent = f.callsign === "—" ? f.icao.toUpperCase() : f.callsign;
 
+      const typeEl = document.createElement("div");
+      typeEl.className = "fl-type";
+      const cached = this.typeCache.get(f.icao);
+      if (cached) typeEl.textContent = `✈ ${cached}`;
+      else void this.ensureType(f.icao, typeEl);
+
       const meta = document.createElement("div");
       meta.className = "fl-meta";
       const dist = document.createElement("span");
@@ -296,11 +303,32 @@ export class FlightLayer {
         const ctry = document.createElement("div");
         ctry.className = "fl-meta";
         ctry.textContent = f.country;
-        li.append(cs, meta, ctry);
+        li.append(cs, typeEl, meta, ctry);
       } else {
-        li.append(cs, meta);
+        li.append(cs, typeEl, meta);
       }
       list.append(li);
+    }
+  }
+
+  /** Holt Flugzeug-Stammdaten (Typ) über den Proxy und schreibt sie ins Label. */
+  private async ensureType(icao: string, el: HTMLElement): Promise<void> {
+    try {
+      const res = await fetch(`/api/aircraft?icao=${icao}`);
+      if (!res.ok) return;
+      const j = await res.json();
+      const parts: string[] = [];
+      if (j.Manufacturer) parts.push(j.Manufacturer);
+      if (j.Type) parts.push(j.Type);
+      let label = parts.join(" ");
+      if (!label && j.ICAOTypeCode) label = j.ICAOTypeCode;
+      if (j.Registration) label += label ? ` · ${j.Registration}` : j.Registration;
+      if (label) {
+        this.typeCache.set(icao, label);
+        el.textContent = `✈ ${label}`;
+      }
+    } catch {
+      /* still unbekannt */
     }
   }
 

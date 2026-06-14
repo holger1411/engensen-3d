@@ -40,8 +40,9 @@ export class Interaction {
     return hits.length ? (hits[0].object as THREE.Mesh) : null;
   }
 
-  private emissiveOf(m: THREE.Mesh): THREE.Color {
-    return (m.material as THREE.MeshStandardMaterial).emissive;
+  private setEmissive(m: THREE.Mesh, hex: number): void {
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    for (const mat of mats) (mat as THREE.MeshStandardMaterial).emissive.setHex(hex);
   }
 
   private onMove = (e: PointerEvent): void => {
@@ -50,9 +51,9 @@ export class Interaction {
     const hit = this.pick();
     if (hit === this.hovered) return;
     // alten Hover zurücksetzen (außer er ist ausgewählt)
-    if (this.hovered && this.hovered !== this.selected) this.emissiveOf(this.hovered).setHex(0x000000);
+    if (this.hovered && this.hovered !== this.selected) this.setEmissive(this.hovered, 0x000000);
     this.hovered = hit;
-    if (hit && hit !== this.selected) this.emissiveOf(hit).setHex(HOVER_EMISSIVE);
+    if (hit && hit !== this.selected) this.setEmissive(hit, HOVER_EMISSIVE);
     this.dom.style.cursor = hit ? "pointer" : "grab";
   };
 
@@ -67,10 +68,10 @@ export class Interaction {
     this.setPointer(e);
     const hit = this.pick();
     // vorherige Auswahl zurücksetzen
-    if (this.selected) this.emissiveOf(this.selected).setHex(0x000000);
+    if (this.selected) this.setEmissive(this.selected, 0x000000);
     if (hit) {
       this.selected = hit;
-      this.emissiveOf(hit).setHex(SELECT_EMISSIVE);
+      this.setEmissive(hit, SELECT_EMISSIVE);
       this.panel.show(hit.userData.info as BuildingInfo);
     } else {
       this.selected = null;

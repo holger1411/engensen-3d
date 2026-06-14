@@ -77,6 +77,64 @@ function shadeColor(base: number, seed: number): THREE.Color {
   return c;
 }
 
+// --- Farben: OSM-Tags wo vorhanden, sonst regional korrekte Palette ----------
+
+/** Übliche CSS-/OSM-Farbnamen → Hex. */
+const NAMED_COLOR: Record<string, number> = {
+  red: 0xb0392a, brown: 0x6b4a2f, grey: 0x6a6a6e, gray: 0x6a6a6e,
+  white: 0xeeece4, black: 0x33343a, darkred: 0x7d2a20, maroon: 0x6e241c,
+  green: 0x4e6b3a, blue: 0x3d5a80, beige: 0xddd0b8, cream: 0xeae0cd,
+  sandstone: 0xcdb892, yellow: 0xd8c46a, orange: 0xc26a34, terracotta: 0xa85a3c,
+  silver: 0xb8bcc0, anthracite: 0x3a3c42,
+};
+
+/** Parst eine OSM-/CSS-Farbe (Hex oder Name). Liefert null bei Unbekannt. */
+function parseCssColor(v?: string): THREE.Color | null {
+  if (!v) return null;
+  const s = v.trim().toLowerCase();
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/.test(s)) return new THREE.Color(s);
+  if (s in NAMED_COLOR) return new THREE.Color(NAMED_COLOR[s]);
+  return null;
+}
+
+/** Dachfarbe aus roof:colour / roof:material, sonst regionale Palette. */
+const ROOF_MATERIAL_COLOR: Record<string, number> = {
+  tile: 0x9c4a32, tiles: 0x9c4a32, roof_tiles: 0x9c4a32, clay: 0x9c4a32, clay_tile: 0x9c4a32,
+  metal: 0x5a5b60, tin: 0x5a5b60, zinc: 0x6a6c72, steel: 0x5e6066,
+  slate: 0x3f4248, concrete: 0x7a786f, tar_paper: 0x44444a, asphalt: 0x44444a,
+  bitumen: 0x44444a, thatch: 0xb89a5a, eternit: 0x8a8c8f, glass: 0x9fb8cf,
+  copper: 0x4e8a72, grass: 0x6f9a4e, gravel: 0x8a8576,
+};
+const CLAY_ROOFS = [0x9c4a32, 0x8f4530, 0xa85a3c, 0x7d3a2a, 0xb5613f, 0x96492f];
+const GREY_ROOFS = [0x55565a, 0x4a4b4f, 0x646468];
+const pickFrom = (arr: number[], seed: number) => arr[Math.floor(hashNoise(seed) * arr.length) % arr.length];
+
+function roofColor(p: Record<string, string | undefined>, cat: Category, seed: number): THREE.Color {
+  const tagged = parseCssColor(p["roof:colour"]);
+  if (tagged) return tagged;
+  const mat = p["roof:material"]?.toLowerCase();
+  if (mat && ROOF_MATERIAL_COLOR[mat] != null) return shadeColor(ROOF_MATERIAL_COLOR[mat], seed);
+  if (cat === "worship") return shadeColor(0x4a4d55, seed); // Schiefer/dunkel
+  if (cat === "outbuilding") return shadeColor(pickFrom(GREY_ROOFS, seed * 3.1), seed); // meist Flachdach
+  // Norddeutschland: überwiegend rote Tonziegel, ~20 % grau (Metall/Schiefer)
+  const base = hashNoise(seed * 3.1) < 0.8 ? pickFrom(CLAY_ROOFS, seed * 4.3) : pickFrom(GREY_ROOFS, seed * 5.7);
+  return shadeColor(base, seed * 1.3);
+}
+
+const BRICK_WALLS = [0x9c5a44, 0xa86a52, 0x8c4f3c, 0xab6b4a];
+const PLASTER_WALLS = [0xe3d9c8, 0xd8cdbb, 0xeae3d6, 0xc9bda6, 0xf0ece3];
+
+function wallColor(p: Record<string, string | undefined>, cat: Category, seed: number): THREE.Color {
+  const tagged = parseCssColor(p["building:colour"]);
+  if (tagged) return tagged;
+  if (cat === "residential" || cat === "farm") {
+    // ~35 % Klinker/Backstein, sonst heller Putz
+    const palette = hashNoise(seed * 5.1) < 0.35 ? BRICK_WALLS : PLASTER_WALLS;
+    return shadeColor(pickFrom(palette, seed * 7.7), seed);
+  }
+  return shadeColor(BASE_COLOR[cat], seed);
+}
+
 function buildingInfo(p: Record<string, string | undefined>, cat: Category, height: number): BuildingInfo {
   const levels = p["building:levels"] ? parseInt(p["building:levels"], 10) : undefined;
   const addr =
@@ -139,18 +197,22 @@ export function buildBuildings(fc: FeatureCollection, proj: Projection): Buildin
     geom.rotateX(-Math.PI / 2); // Footprint-Ebene → XZ, Höhe entlang +Y, Norden → -Z
     geom.computeVertexNormals();
 
-    const material = new THREE.MeshStandardMaterial({
-      color: shadeColor(BASE_COLOR[cat], seed),
-      roughness: 0.85,
+    // ExtrudeGeometry hat zwei Material-Gruppen: 0 = Deckel (Dach/Boden), 1 = Seiten (Wand).
+    const roofMat = new THREE.MeshStandardMaterial({
+      color: roofColor(f.properties, cat, seed),
+      roughness: 0.6,
+      metalness: 0.05,
+    });
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: wallColor(f.properties, cat, seed),
+      roughness: 0.88,
       metalness: 0.0,
-      flatShading: false,
     });
 
-    const mesh = new THREE.Mesh(geom, material);
+    const mesh = new THREE.Mesh(geom, [roofMat, wallMat]);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.userData.info = buildingInfo(f.properties, cat, height);
-    mesh.userData.baseColor = (material.color as THREE.Color).getHex();
     group.add(mesh);
     meshes.push(mesh);
   }

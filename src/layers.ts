@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { Projection, type Vec2 } from "./geo";
+import { Projection, hashNoise, type Vec2 } from "./geo";
 import type { FeatureCollection } from "./types";
 
 /** Wandelt einen projizierten 2D-Punkt (y=Nord) in Welt-XZ um (Norden → -Z). */
@@ -35,8 +35,8 @@ export function buildRoads(fc: FeatureCollection, proj: Projection): THREE.Group
     emitRibbon(pts, half, target);
   }
 
-  if (positions.length) group.add(ribbonMesh(positions, ROAD_COLOR, 0.06));
-  if (pathPositions.length) group.add(ribbonMesh(pathPositions, PATH_COLOR, 0.04));
+  if (positions.length) group.add(ribbonMesh(positions, ROAD_COLOR, 0.5, -4));
+  if (pathPositions.length) group.add(ribbonMesh(pathPositions, PATH_COLOR, 0.45, -3));
   return group;
 }
 
@@ -60,25 +60,30 @@ function emitRibbon(pts: THREE.Vector2[], half: number, out: number[]): void {
 }
 const pushXZ = (out: number[], v: THREE.Vector2) => out.push(v.x, 0, v.y);
 
-function ribbonMesh(positions: number[], color: number, y: number): THREE.Mesh {
+function ribbonMesh(positions: number[], color: number, y: number, offset: number): THREE.Mesh {
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geom.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
+  const mat = new THREE.MeshStandardMaterial({
+    color, roughness: 0.95, metalness: 0, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset,
+  });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.y = y;
+  mesh.renderOrder = 2;
   mesh.receiveShadow = true;
   return mesh;
 }
 
 // --- Flächen (Grün / Wasser / Wald) ------------------------------------------
+// Bewusst ohne großflächige „Slab"-Flächen (residential/farmyard/construction),
+// die unter dem ganzen Ort liegen und Z-Fighting verursachen.
 const AREA_COLORS: Record<string, number> = {
   forest: 0x4a6b3a, wood: 0x4a6b3a, scrub: 0x6e7d4a, grass: 0x7faa56,
-  meadow: 0x86b35a, farmland: 0xc9b772, farmyard: 0xb7a98a, orchard: 0x6f9a4e,
+  meadow: 0x86b35a, farmland: 0xc9b772, orchard: 0x6f9a4e,
   cemetery: 0x6f8a5f, recreation_ground: 0x7faa56, village_green: 0x86b35a,
   pitch: 0x5b9e5b, playground: 0xb88a4a, sports_centre: 0x5b9e5b,
-  park: 0x7faa56, garden: 0x86b35a, water: 0x4a7fb0, residential: 0xb6b2a8,
-  construction: 0xb6a98a, heath: 0x9a8f5a,
+  park: 0x7faa56, garden: 0x86b35a, water: 0x4a7fb0, heath: 0x9a8f5a,
 };
 
 /** Baut flache, eingefärbte Flächen aus Polygonen. Wasserwege werden ignoriert. */
@@ -86,6 +91,7 @@ export function buildAreas(fc: FeatureCollection, proj: Projection): THREE.Group
   const group = new THREE.Group();
   group.name = "areas";
 
+  let i = 0;
   for (const f of fc.features) {
     if (f.geometry.type !== "Polygon") continue;
     const key = (f.properties.value || f.properties.kind || "") as string;
@@ -112,23 +118,30 @@ export function buildAreas(fc: FeatureCollection, proj: Projection): THREE.Group
       roughness: isWater ? 0.3 : 0.95,
       metalness: isWater ? 0.1 : 0,
       side: THREE.DoubleSide,
+      // Zieht die Fläche in der Tiefe konsistent über den Boden → kein Flimmern.
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
     const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.y = isWater ? 0.03 : 0.02;
+    // Winziger deterministischer Höhen-Versatz bricht Koplanarität überlappender Flächen.
+    mesh.position.y = 0.05 + hashNoise(i * 2.3) * 0.4 + (isWater ? 0.2 : 0);
+    mesh.renderOrder = 1;
     mesh.receiveShadow = true;
     group.add(mesh);
+    i++;
   }
 
   return group;
 }
 
-/** Große Bodenplatte als Untergrund. */
+/** Große Bodenplatte als Untergrund (etwas tiefer, damit Flächen klar darüber liegen). */
 export function buildGround(size = 3000): THREE.Mesh {
   const geom = new THREE.PlaneGeometry(size, size);
   geom.rotateX(-Math.PI / 2);
   const mat = new THREE.MeshStandardMaterial({ color: 0x8ea864, roughness: 1, metalness: 0 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.y = 0;
+  mesh.position.y = -1.5;
   mesh.receiveShadow = true;
   return mesh;
 }
