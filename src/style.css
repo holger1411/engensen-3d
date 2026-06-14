@@ -38,6 +38,20 @@ html, body {
 .title strong { font-size: 18px; letter-spacing: 0.2px; }
 .title span { font-size: 12px; color: var(--muted); }
 
+.badges { display: flex; align-items: center; gap: 8px; pointer-events: auto; }
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+.badge:empty { display: none; }
 .weather {
   pointer-events: auto;
   display: flex;

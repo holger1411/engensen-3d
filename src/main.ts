@@ -8,6 +8,7 @@ import { InfoPanel } from "./infoPanel";
 import { Interaction } from "./interaction";
 import { initWeather } from "./weather";
 import { FlightLayer } from "./flights";
+import { SolarSky } from "./sky";
 import type { FeatureCollection, Meta } from "./types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -31,7 +32,8 @@ function setStatus(msg: string, done = false): void {
 
 async function main(): Promise<void> {
   const container = document.getElementById("app")!;
-  const { renderer, scene, camera, controls, sun } = createScene(container);
+  const bundle = createScene(container);
+  const { renderer, scene, camera, controls } = bundle;
 
   try {
     setStatus("Lade Geodaten …");
@@ -60,15 +62,12 @@ async function main(): Promise<void> {
     const { group, meshes } = buildBuildings(buildingsFC, proj, terrain);
     scene.add(group);
 
-    // Richte das Sonnen-Target auf das Zentrum
-    sun.target.position.set(0, 0, 0);
-    sun.target.updateMatrixWorld();
-
     // Interaktion
     const panel = new InfoPanel();
     new Interaction(renderer.domElement, camera, meshes, panel);
 
-    // Live-Layer: Wetter + Flüge
+    // Live-Layer: Sonnenstand/Himmel, Wetter, Flüge
+    new SolarSky(bundle, meta.center).start();
     initWeather(meta.center);
     const flights = new FlightLayer(scene, proj, meta);
     flights.start();

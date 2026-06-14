@@ -7,6 +7,8 @@ export interface SceneBundle {
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   sun: THREE.DirectionalLight;
+  hemi: THREE.HemisphereLight;
+  ambient: THREE.AmbientLight;
 }
 
 export function createScene(container: HTMLElement): SceneBundle {
@@ -64,5 +66,5 @@ export function createScene(container: HTMLElement): SceneBundle {
     renderer.setSize(container.clientWidth, container.clientHeight);
   });
 
-  return { renderer, scene, camera, controls, sun };
+  return { renderer, scene, camera, controls, sun, hemi, ambient };
 }
