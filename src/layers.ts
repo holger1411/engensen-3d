@@ -89,6 +89,8 @@ const AREA_COLORS: Record<string, number> = {
   pitch: 0x5b9e5b, playground: 0xb88a4a, sports_centre: 0x5b9e5b,
   park: 0x7faa56, garden: 0x86b35a, water: 0x4a7fb0, heath: 0x9a8f5a,
   parking: 0x9a9690, // Parkplatz
+  horse_riding: 0xb39a6a, quarry: 0xcbbd96, // Reitplatz, Sandgrube (Satellitenbild)
+  golf_course: 0x6fa85a, fairway: 0x6fb35a, green: 0x57a84e, // Golfplatz Burgwedel
 };
 
 /** Baut eingefärbte Flächen aus Polygonen, auf das Gelände drapiert. */
