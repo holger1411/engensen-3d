@@ -24,17 +24,18 @@ export function createScene(container: HTMLElement): SceneBundle {
   const scene = new THREE.Scene();
   const skyColor = new THREE.Color(0x9fc4e8);
   scene.background = skyColor;
-  scene.fog = new THREE.Fog(skyColor, 900, 1900);
+  // Weite Sicht, damit echte Flugzeuge im Nahbereich und Wolken sichtbar sind.
+  scene.fog = new THREE.Fog(skyColor, 1800, 26000);
 
-  const camera = new THREE.PerspectiveCamera(55, container.clientWidth / container.clientHeight, 1, 6000);
+  const camera = new THREE.PerspectiveCamera(55, container.clientWidth / container.clientHeight, 1, 80000);
   camera.position.set(260, 220, 320);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.maxPolarAngle = Math.PI / 2.05; // nicht unter den Horizont
+  controls.maxPolarAngle = Math.PI / 2.02; // nicht unter den Horizont
   controls.minDistance = 30;
-  controls.maxDistance = 1400;
+  controls.maxDistance = 30000; // weit herauszoomen, um hohe Flugzeuge zu sehen
   controls.target.set(0, 0, 0);
 
   // --- Licht ---

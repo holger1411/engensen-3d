@@ -45,13 +45,24 @@ export class Interaction {
     for (const mat of mats) (mat as THREE.MeshStandardMaterial).emissive.setHex(hex);
   }
 
+  /** Setzt das Emissive auf den Nacht-Glühwert des Gebäudes (oder schwarz). */
+  private resetEmissive(m: THREE.Mesh): void {
+    const glow = (m.userData.glow as THREE.Color) || null;
+    const mats = Array.isArray(m.material) ? m.material : [m.material];
+    for (const mat of mats) {
+      const em = (mat as THREE.MeshStandardMaterial).emissive;
+      if (glow) em.copy(glow);
+      else em.setHex(0x000000);
+    }
+  }
+
   private onMove = (e: PointerEvent): void => {
     this.setPointer(e);
     if (this.downPos.distanceTo(this.pointer) > 0.01) this.moved = true;
     const hit = this.pick();
     if (hit === this.hovered) return;
     // alten Hover zurücksetzen (außer er ist ausgewählt)
-    if (this.hovered && this.hovered !== this.selected) this.setEmissive(this.hovered, 0x000000);
+    if (this.hovered && this.hovered !== this.selected) this.resetEmissive(this.hovered);
     this.hovered = hit;
     if (hit && hit !== this.selected) this.setEmissive(hit, HOVER_EMISSIVE);
     this.dom.style.cursor = hit ? "pointer" : "grab";
@@ -68,7 +79,7 @@ export class Interaction {
     this.setPointer(e);
     const hit = this.pick();
     // vorherige Auswahl zurücksetzen
-    if (this.selected) this.setEmissive(this.selected, 0x000000);
+    if (this.selected) this.resetEmissive(this.selected);
     if (hit) {
       this.selected = hit;
       this.setEmissive(hit, SELECT_EMISSIVE);

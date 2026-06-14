@@ -1,38 +1,30 @@
 /**
- * Server-seitiger Proxy für die OpenSky-Flugdaten (umgeht die CORS-Beschränkung
- * der OpenSky-API, die nur die eigene Domain erlaubt). Läuft als Vercel-Function.
- *
- * Optional: Mit den Umgebungsvariablen OPENSKY_USER / OPENSKY_PASS wird ein
- * höheres Rate-Limit genutzt; ohne sie funktioniert der anonyme Zugriff.
+ * Server-seitiger Proxy für Live-Flugdaten über adsb.lol (frei, ohne Key).
+ * Radius-Abfrage um einen Punkt — liefert Distanz, Richtung, Typ, Kennung,
+ * Höhe, Kurs und ein Militär-Flag (dbFlags) direkt mit.
+ * Läuft als Vercel-Function; im Dev übernimmt ein Vite-Plugin dieselbe Route.
  */
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
-  const { lamin, lomin, lamax, lomax } = req.query || {};
-  if (!lamin || !lomin || !lamax || !lomax) {
-    res.status(400).json({ error: "bbox fehlt (lamin,lomin,lamax,lomax)" });
+  const { lat, lon, dist } = req.query || {};
+  if (!lat || !lon) {
+    res.status(400).json({ error: "lat/lon fehlt" });
     return;
   }
-
-  const url =
-    `https://opensky-network.org/api/states/all` +
-    `?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
-
-  const headers = {};
-  if (process.env.OPENSKY_USER && process.env.OPENSKY_PASS) {
-    const token = Buffer.from(`${process.env.OPENSKY_USER}:${process.env.OPENSKY_PASS}`).toString("base64");
-    headers.Authorization = `Basic ${token}`;
-  }
+  const nm = Math.min(Math.max(parseInt(dist, 10) || 30, 1), 250);
+  const url = `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${nm}`;
 
   try {
-    const upstream = await fetch(url, { headers });
+    const upstream = await fetch(url, {
+      headers: { "User-Agent": "engensen3d/1.0 (+https://github.com/; flight overlay)" },
+    });
     if (!upstream.ok) {
-      res.status(upstream.status).json({ error: `OpenSky HTTP ${upstream.status}` });
+      res.status(upstream.status).json({ error: `adsb.lol HTTP ${upstream.status}` });
       return;
     }
     const data = await upstream.json();
-    // CDN-Caching: mehrere Besucher teilen sich einen Abruf → schont das Rate-Limit
-    res.setHeader("Cache-Control", "s-maxage=10, stale-while-revalidate=20");
+    res.setHeader("Cache-Control", "s-maxage=5, stale-while-revalidate=15");
     res.status(200).json(data);
   } catch (err) {
     res.status(502).json({ error: `Proxy-Fehler: ${String(err)}` });

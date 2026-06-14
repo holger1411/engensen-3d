@@ -68,13 +68,16 @@ async function main(): Promise<void> {
     const panel = new InfoPanel();
     new Interaction(renderer.domElement, camera, meshes, panel);
 
-    // Live-Layer: Sonnenstand/Himmel, Wetter, Flüge
-    new SolarSky(bundle, meta.center).start();
+    // Live-Layer: Sonnenstand/Himmel (mit Nachtbeleuchtung), Wetter, Flüge
+    // Optionaler Vorschau-Zeitparameter ?t=ISO (z. B. ?t=2026-06-14T23:00), sonst Echtzeit.
+    const tParam = new URLSearchParams(location.search).get("t");
+    const simTime = tParam && !isNaN(Date.parse(tParam)) ? new Date(tParam) : null;
+    new SolarSky(bundle, meta.center, meshes, simTime).start();
     initWeather(meta.center);
     initAir(meta.center);
     const clouds = new CloudSystem(scene, meta.center);
     clouds.start();
-    const flights = new FlightLayer(scene, proj, meta);
+    const flights = new FlightLayer(scene, proj, meta, camera, controls);
     flights.start();
 
     // Statistik unten links

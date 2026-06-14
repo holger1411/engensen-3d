@@ -217,6 +217,9 @@ export function buildBuildings(fc: FeatureCollection, proj: Projection, terrain:
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.userData.info = buildingInfo(f.properties, cat, height);
+    // Nachtbeleuchtung: ~58 % der bewohnbaren Gebäude bekommen warmes Fensterlicht.
+    mesh.userData.lit = cat !== "outbuilding" && hashNoise(seed * 9.4) < 0.58;
+    mesh.userData.glow = new THREE.Color(0, 0, 0); // aktueller Nacht-Emissivwert
     group.add(mesh);
     meshes.push(mesh);
   }

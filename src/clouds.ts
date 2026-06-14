@@ -8,8 +8,8 @@ import * as THREE from "three";
  * (b) Niederschlagsradar: echte RainViewer-Radar-Tiles als Overhead-Layer.
  */
 
-const CLOUD_Y = 640;
-const RADAR_Y = 430;
+const CLOUD_Y = 1500; // realistische Wolkenhöhe (m)
+const RADAR_Y = 1150;
 const TILE_WORLD = 950; // Welt-Einheiten pro Radar-Kachel
 const RADAR_Z = 8; // Zoomstufe der Radar-Kacheln
 
