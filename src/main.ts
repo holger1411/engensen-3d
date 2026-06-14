@@ -13,6 +13,7 @@ import { initSolar } from "./solar";
 import { FlightLayer } from "./flights";
 import { SolarSky } from "./sky";
 import { CloudSystem } from "./clouds";
+import { IssLayer } from "./iss";
 import type { FeatureCollection, Meta } from "./types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -96,6 +97,7 @@ async function main(): Promise<void> {
     initSolar(meta.center);
     const clouds = new CloudSystem(scene, meta.center);
     clouds.start();
+    new IssLayer(scene, meta.center).start();
     const flights = new FlightLayer(scene, proj, meta, camera, controls);
     flights.start();
 
