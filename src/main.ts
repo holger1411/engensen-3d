@@ -9,6 +9,7 @@ import { InfoPanel } from "./infoPanel";
 import { Interaction } from "./interaction";
 import { initWeather } from "./weather";
 import { initAir } from "./air";
+import { initSolar } from "./solar";
 import { FlightLayer } from "./flights";
 import { SolarSky } from "./sky";
 import { CloudSystem } from "./clouds";
@@ -90,6 +91,7 @@ async function main(): Promise<void> {
     new SolarSky(bundle, meta.center, meshes, simTime).start();
     initWeather(meta.center);
     initAir(meta.center);
+    initSolar(meta.center);
     const clouds = new CloudSystem(scene, meta.center);
     clouds.start();
     const flights = new FlightLayer(scene, proj, meta, camera, controls);
