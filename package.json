@@ -1,0 +1,23 @@
+{
+  "name": "engensen-3d",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Interaktives 3D-Modell des Ortskerns von Engensen (30938 Burgwedel) aus OpenStreetMap-Daten",
+  "scripts": {
+    "fetch-osm": "node scripts/fetch-osm.mjs",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.169.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
+  }
+}

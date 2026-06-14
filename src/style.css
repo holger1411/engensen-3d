@@ -1,0 +1,165 @@
+:root {
+  --bg: #0f1115;
+  --panel: rgba(20, 24, 31, 0.86);
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --text: #eef2f7;
+  --muted: #a3adbb;
+  --accent: #f2c14e;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+#app { position: fixed; inset: 0; }
+#app canvas { display: block; cursor: grab; }
+#app canvas:active { cursor: grabbing; }
+
+/* --- Kopfzeile --- */
+#topbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, rgba(8, 10, 14, 0.7), rgba(8, 10, 14, 0));
+  pointer-events: none;
+  z-index: 10;
+}
+.title { display: flex; flex-direction: column; line-height: 1.25; }
+.title strong { font-size: 18px; letter-spacing: 0.2px; }
+.title span { font-size: 12px; color: var(--muted); }
+
+.weather {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-size: 14px;
+  backdrop-filter: blur(8px);
+}
+.weather .w-temp { font-size: 18px; font-weight: 700; }
+.weather .w-icon { font-size: 20px; }
+.weather .w-meta { color: var(--muted); font-size: 12px; }
+
+/* --- Flug-Panel --- */
+#flights-panel {
+  position: fixed;
+  top: 70px; left: 16px;
+  width: 250px;
+  max-height: 46vh;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  backdrop-filter: blur(8px);
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+}
+.flights-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+.flights-head .dot { width: 8px; height: 8px; border-radius: 50%; background: #46d17a; box-shadow: 0 0 8px #46d17a; animation: pulse 1.8s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+#flights-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+#flights-list li { padding: 7px 4px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px; }
+#flights-list li:last-child { border-bottom: none; }
+.flights-empty { color: var(--muted); }
+.fl-callsign { font-weight: 700; letter-spacing: 0.4px; }
+.fl-meta { color: var(--muted); font-size: 11.5px; margin-top: 2px; display: flex; gap: 10px; flex-wrap: wrap; }
+.fl-dist { color: var(--accent); }
+.flights-foot { color: var(--muted); font-size: 10.5px; margin-top: 6px; text-align: right; }
+
+/* --- Gebäude-Info --- */
+#info-panel {
+  position: fixed;
+  right: 16px; bottom: 56px;
+  width: 280px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  backdrop-filter: blur(8px);
+  transform: translateY(12px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 11;
+}
+#info-panel.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+#info-body h2 { margin: 0 0 10px; font-size: 17px; color: var(--accent); }
+.info-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; border-bottom: 1px dashed rgba(255,255,255,0.08); }
+.info-row span { color: var(--muted); }
+.info-row b { text-align: right; }
+#info-close {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: none; color: var(--muted);
+  font-size: 22px; line-height: 1; cursor: pointer;
+}
+#info-close:hover { color: var(--text); }
+
+/* --- Fußzeile --- */
+#credits {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  padding: 7px 16px;
+  font-size: 11px;
+  color: var(--muted);
+  background: linear-gradient(0deg, rgba(8,10,14,0.7), rgba(8,10,14,0));
+  z-index: 8;
+}
+#credits .sep { margin: 0 6px; }
+#stats { color: var(--text); }
+
+/* --- Bedienhinweis --- */
+#hint {
+  position: fixed;
+  left: 50%; bottom: 36px;
+  transform: translateX(-50%);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  padding: 7px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  backdrop-filter: blur(8px);
+  z-index: 8;
+  animation: fadeOut 1s ease 7s forwards;
+}
+@keyframes fadeOut { to { opacity: 0; visibility: hidden; } }
+
+/* --- Ladeanzeige --- */
+#loading {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px;
+  background: var(--bg);
+  z-index: 100;
+  transition: opacity 0.5s ease;
+}
+#loading.hidden { opacity: 0; pointer-events: none; }
+.spinner {
+  width: 42px; height: 42px;
+  border: 4px solid rgba(255,255,255,0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { color: var(--muted); font-size: 14px; }
+
+@media (max-width: 620px) {
+  #flights-panel { width: 200px; max-height: 36vh; }
+  #info-panel { width: calc(100vw - 32px); }
+}

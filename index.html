@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Engensen 3D — Ortskern Burgwedel</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <!-- Kopfzeile -->
+    <header id="topbar">
+      <div class="title">
+        <strong>Engensen 3D</strong>
+        <span>Ortskern · 30938 Burgwedel</span>
+      </div>
+      <div id="weather" class="weather" title="Aktuelles Wetter">
+        <span class="w-loading">Wetter lädt …</span>
+      </div>
+    </header>
+
+    <!-- Flug-Tafel -->
+    <aside id="flights-panel">
+      <div class="flights-head">
+        <span class="dot"></span> Flüge in der Nähe
+      </div>
+      <ul id="flights-list">
+        <li class="flights-empty">Suche Flugzeuge …</li>
+      </ul>
+      <div class="flights-foot">Daten: OpenSky Network</div>
+    </aside>
+
+    <!-- Gebäude-Info -->
+    <section id="info-panel">
+      <button id="info-close" aria-label="Schließen">×</button>
+      <div id="info-body"></div>
+    </section>
+
+    <!-- Fußzeile / Credits -->
+    <footer id="credits">
+      <span id="stats">Engensen</span>
+      <span class="sep">·</span>
+      <span>Gebäude © OpenStreetMap (ODbL) · Flüge © OpenSky · Wetter © Open-Meteo</span>
+    </footer>
+
+    <!-- Bedienhinweis -->
+    <div id="hint">🖱️ Ziehen = drehen · Scrollen = zoomen · Klick auf Gebäude = Info</div>
+
+    <!-- Ladeanzeige -->
+    <div id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Lade …</div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
