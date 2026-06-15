@@ -14,15 +14,15 @@ function zombiePart(w: number, h: number, d: number, x: number, y: number, z: nu
   return g;
 }
 
-/** Humanoide Zombie-Figur: Beine, Torso, Kopf, Arme (Beine sind animierbar). */
+/** Hagere Zombie-Figur: dünne Glieder, gebeugter Kopf, hängende Arme. */
 function buildZombieGeometry(): THREE.BufferGeometry {
   const parts = [
-    zombiePart(2.2, 6, 2.4, -1.6, 3, 0, 1, -1),    // linkes Bein (y 0..6)
-    zombiePart(2.2, 6, 2.4, 1.6, 3, 0, 1, 1),      // rechtes Bein
-    zombiePart(5.4, 5.6, 3, 0, 8.8, 0, 0, 0),      // Torso (y 6..11.6)
-    zombiePart(3, 3, 3, 0, 13.2, 0, 0, 0),         // Kopf
-    zombiePart(1.6, 5.4, 1.6, -3.5, 8.8, 0.4, 0, 0), // linker Arm (leicht vor)
-    zombiePart(1.6, 5.4, 1.6, 3.5, 8.8, 0.4, 0, 0),  // rechter Arm
+    zombiePart(1.1, 6, 1.3, -1.1, 3, 0, 1, -1),     // linkes Bein (dünn, y 0..6)
+    zombiePart(1.1, 6, 1.3, 1.1, 3, 0, 1, 1),       // rechtes Bein
+    zombiePart(2.9, 5.4, 1.8, 0, 8.6, 0, 0, 0),     // schmaler Torso
+    zombiePart(2.0, 2.3, 2.0, 0, 12.0, 0.6, 0, 0),  // Kopf, leicht nach vorn gebeugt
+    zombiePart(0.85, 6.4, 0.85, -2.0, 8.0, 1.0, 0, 0), // linker Arm: dünn, lang, nach vorn hängend
+    zombiePart(0.85, 6.4, 0.85, 2.0, 8.0, 1.0, 0, 0),  // rechter Arm
   ];
   const merged = mergeGeometries(parts, false)!;
   parts.forEach((p) => p.dispose());
@@ -85,7 +85,7 @@ export function buildForestSpawnPoints(
 const TOWN_RADIUS = 360; // m: ab hier "im Ort" → Bevölkerungs-Drain
 const ZOMBIE_HP = 100;
 const ZOMBIE_SPEED = 6.5; // m/s
-const MAX_ZOMBIES = 600; // InstancedMesh-Kapazität
+const MAX_ZOMBIES = 900; // InstancedMesh-Kapazität
 
 export interface ZombieOpts {
   center: THREE.Vector3;

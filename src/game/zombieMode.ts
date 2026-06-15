@@ -5,9 +5,9 @@ import { ProjectileManager } from "./projectiles";
 import { ZombieField, drainRate } from "./zombies";
 import type { TerrainSampler } from "../terrain";
 
-const HORDE_TOTAL = 300;          // endliche Invasion
-const SPAWN_START = 4.5;          // s zwischen Gruppen am Anfang
-const SPAWN_MIN = 1.4;            // s am Ende (ansteigend)
+const HORDE_TOTAL = 600;          // endliche Invasion (größer = schwerer)
+const SPAWN_START = 4.0;          // s zwischen Gruppen am Anfang
+const SPAWN_MIN = 1.0;            // s am Ende (ansteigend)
 const SPAWN_RAMP = 90;            // s bis zur Maximalrate
 const START_POP = 1500;
 const DRAIN_K = 0.5;              // Personen/s pro Zombie im Ort
@@ -71,9 +71,9 @@ export class GameController {
   /** Gemischte Gruppengrößen: Einzelgänger, kleine Trupps, große Horden. */
   private groupSize(): number {
     const r = Math.random();
-    if (r < 0.25) return 1 + Math.floor(Math.random() * 3); // 1–3 Einzelgänger
-    if (r < 0.7) return 4 + Math.floor(Math.random() * 6);  // 4–9 kleine Gruppe
-    return 10 + Math.floor(Math.random() * 12);             // 10–21 große Horde
+    if (r < 0.2) return 1 + Math.floor(Math.random() * 3);  // 1–3 Einzelgänger
+    if (r < 0.6) return 5 + Math.floor(Math.random() * 7);  // 5–11 kleine Gruppe
+    return 12 + Math.floor(Math.random() * 16);             // 12–27 große Horde
   }
 
   /** Zielpunkt = Schnittpunkt der Blickrichtung (Fadenkreuz) mit dem Gelände. */
