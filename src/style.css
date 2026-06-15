@@ -214,6 +214,20 @@ body.flir #flir-hud { display: block; }
 .flir-bracket.bl { transform: translate(-150px, -50%); border-top: 2px solid #fff; border-bottom: 2px solid #fff; border-left: 2px solid #fff; box-shadow: 0 0 5px #fff; width: 14px; }
 .flir-bracket.br { transform: translate(136px, -50%); border-top: 2px solid #fff; border-bottom: 2px solid #fff; border-right: 2px solid #fff; box-shadow: 0 0 5px #fff; width: 14px; }
 
+.fh.game-top { top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 22px; font-size: 16px; }
+#game-pop { color: #eaeaea; }
+#game-zombies { color: #cfcfcf; }
+.fh.game-weapon { left: 50%; bottom: 54px; transform: translateX(-50%); text-align: center; display: flex; gap: 12px; align-items: center; }
+#game-weapon { font-weight: 700; }
+#game-reload { width: 90px; height: 5px; background: rgba(255,255,255,0.2); border-radius: 3px; overflow: hidden; }
+#game-reload i { display: block; height: 100%; width: 100%; background: #fff; transform-origin: left; }
+#game-banner {
+  position: absolute; top: 42%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 40px; font-weight: 800; letter-spacing: 3px; text-align: center;
+  display: none;
+}
+#game-banner.show { display: block; }
+
 /* --- Reset-Knopf --- */
 #reset-view {
   position: fixed;

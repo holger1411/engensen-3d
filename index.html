@@ -54,7 +54,7 @@
     <button id="reset-view" title="Kamera in die Ausgangsposition zurücksetzen">⌂ Ansicht zurücksetzen</button>
 
     <!-- FLIR / Wärmebild umschalten -->
-    <button id="flir-toggle" title="Wärmebild (FLIR) ein/aus — Taste F">🎯 FLIR</button>
+    <button id="flir-toggle" title="Zombie-Modus (AC-130-Verteidigung) ein/aus — Taste F">🧟 Zombie-Modus</button>
 
     <!-- FLIR-HUD (nur im Wärmebildmodus sichtbar) -->
     <div id="flir-hud" aria-hidden="true">
@@ -85,6 +85,16 @@
       <div class="flir-bracket bb"></div>
       <div class="flir-bracket bl"></div>
       <div class="flir-bracket br"></div>
+      <div class="fh game-top">
+        <span id="game-pop">POP 1500</span>
+        <span id="game-zombies">⛬ 0</span>
+      </div>
+      <div class="fh game-weapon">
+        <span id="game-weapon">25mm</span>
+        <span id="game-ammo">3000</span>
+        <div id="game-reload"><i></i></div>
+      </div>
+      <div id="game-banner"></div>
     </div>
 
     <!-- Bedienhinweis -->
