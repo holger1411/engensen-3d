@@ -14,6 +14,7 @@ import { FlightLayer } from "./flights";
 import { SolarSky } from "./sky";
 import { CloudSystem } from "./clouds";
 import { IssLayer } from "./iss";
+import { FlirMode } from "./flir";
 import type { FeatureCollection, Meta } from "./types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -41,6 +42,14 @@ async function main(): Promise<void> {
   const { renderer, scene, camera, controls } = bundle;
   const homePos = camera.position.clone();
   const homeTarget = controls.target.clone();
+
+  // FLIR / Wärmebildmodus (Taste F oder Button)
+  const flir = new FlirMode(renderer, scene, camera);
+  document.getElementById("flir-toggle")?.addEventListener("click", () => flir.toggle());
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "f" || e.key === "F") flir.toggle();
+  });
+  window.addEventListener("resize", () => flir.setSize(container.clientWidth, container.clientHeight));
 
   // --- Tastatursteuerung: Pfeiltasten (und WASD) bewegen die Kamera über die Karte ---
   const pressed = new Set<string>();
@@ -169,7 +178,7 @@ async function main(): Promise<void> {
       controls.update();
       flights.update(dt);
       clouds.update(dt);
-      renderer.render(scene, camera);
+      flir.render(clock.elapsedTime); // rendert normal ODER im Wärmebildmodus
     }
     animate();
   } catch (err) {

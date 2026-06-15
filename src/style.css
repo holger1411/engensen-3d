@@ -145,6 +145,75 @@ html, body {
 #credits .sep { margin: 0 6px; }
 #stats { color: var(--text); }
 
+/* --- FLIR / Wärmebild --- */
+#flir-toggle {
+  position: fixed;
+  right: 16px; top: 112px;
+  z-index: 60;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 9px 14px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+#flir-toggle:hover { background: rgba(255,255,255,0.1); }
+#flir-toggle.active { background: #1d2a1d; border-color: #3f7a3f; color: #b6f0b6; }
+
+/* Im FLIR-Modus die normale UI ausblenden (nur HUD + Toggle bleiben) */
+body.flir #topbar,
+body.flir #flights-panel,
+body.flir #info-panel,
+body.flir #credits,
+body.flir #hint,
+body.flir #reset-view { display: none !important; }
+body.flir #flir-toggle { right: 16px; top: 16px; }
+
+#flir-hud {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  display: none;
+  z-index: 50;
+  font-family: "Courier New", ui-monospace, monospace;
+  color: #ededed;
+  text-shadow: 0 0 4px rgba(255,255,255,0.55);
+  letter-spacing: 1px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+body.flir #flir-hud { display: block; }
+.flir-scan {
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(rgba(0,0,0,0.18) 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply;
+}
+.fh { position: absolute; white-space: nowrap; }
+.fh.tl { top: 16px; left: 20px; }
+.fh.tr { top: 16px; right: 22px; text-align: right; }
+.fh.bl { bottom: 16px; left: 20px; }
+.fh.bc { bottom: 16px; left: 50%; transform: translateX(-50%); }
+.fh.br { bottom: 16px; right: 22px; }
+.fh.rc { top: 50%; right: 22px; transform: translateY(-50%); }
+.fh .big { font-size: 18px; font-weight: 700; }
+
+.flir-cross { position: absolute; top: 50%; left: 50%; width: 280px; height: 280px; transform: translate(-50%,-50%); }
+.flir-cross::before, .flir-cross::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 5px #fff; }
+.flir-cross::before { left: 50%; top: 0; width: 1.5px; height: 100%; transform: translateX(-50%); }
+.flir-cross::after { top: 50%; left: 0; height: 1.5px; width: 100%; transform: translateY(-50%); }
+.flir-box {
+  position: absolute; top: 50%; left: 50%;
+  width: 30px; height: 24px;
+  transform: translate(-50%,-50%);
+  border: 1.5px solid #fff; box-shadow: 0 0 5px #fff;
+}
+.flir-bracket { position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; }
+.flir-bracket.bt { transform: translate(-50%, -150px); border-left: 2px solid #fff; border-right: 2px solid #fff; border-top: 2px solid #fff; box-shadow: 0 0 5px #fff; height: 14px; }
+.flir-bracket.bb { transform: translate(-50%, 136px); border-left: 2px solid #fff; border-right: 2px solid #fff; border-bottom: 2px solid #fff; box-shadow: 0 0 5px #fff; height: 14px; }
+.flir-bracket.bl { transform: translate(-150px, -50%); border-top: 2px solid #fff; border-bottom: 2px solid #fff; border-left: 2px solid #fff; box-shadow: 0 0 5px #fff; width: 14px; }
+.flir-bracket.br { transform: translate(136px, -50%); border-top: 2px solid #fff; border-bottom: 2px solid #fff; border-right: 2px solid #fff; box-shadow: 0 0 5px #fff; width: 14px; }
+
 /* --- Reset-Knopf --- */
 #reset-view {
   position: fixed;

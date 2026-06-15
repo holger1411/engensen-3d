@@ -53,6 +53,40 @@
     <!-- Kamera zurücksetzen -->
     <button id="reset-view" title="Kamera in die Ausgangsposition zurücksetzen">⌂ Ansicht zurücksetzen</button>
 
+    <!-- FLIR / Wärmebild umschalten -->
+    <button id="flir-toggle" title="Wärmebild (FLIR) ein/aus — Taste F">🎯 FLIR</button>
+
+    <!-- FLIR-HUD (nur im Wärmebildmodus sichtbar) -->
+    <div id="flir-hud" aria-hidden="true">
+      <div class="flir-scan"></div>
+      <div class="fh tl">
+        <div>O&nbsp;&nbsp;A-G&nbsp;&nbsp;MAN&nbsp;&nbsp;NARO</div>
+        <div>RAY</div>
+        <div>FF 30</div>
+        <div>LIR</div>
+        <div>BORE</div>
+      </div>
+      <div class="fh tr">
+        <div id="flir-hdg">000 N</div>
+        <div id="flir-agl">6298 AGL</div>
+        <div>WHOT</div>
+      </div>
+      <div class="fh bl">
+        <div>25 mm</div>
+        <div>40 mm</div>
+        <div class="big">105 mm</div>
+      </div>
+      <div class="fh bc">L1514&nbsp;&nbsp;RDY</div>
+      <div class="fh br"><span id="flir-clock">0:00</span></div>
+      <div class="fh rc">TGT</div>
+      <div class="flir-cross"></div>
+      <div class="flir-box"></div>
+      <div class="flir-bracket bt"></div>
+      <div class="flir-bracket bb"></div>
+      <div class="flir-bracket bl"></div>
+      <div class="flir-bracket br"></div>
+    </div>
+
     <!-- Bedienhinweis -->
     <div id="hint">🖱️ Ziehen = drehen · Scrollen = zoomen · ⬅️➡️⬆️⬇️ Pfeiltasten = bewegen · Klick auf Gebäude = Info</div>
 
