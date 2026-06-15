@@ -53,3 +53,93 @@ export function buildForestSpawnPoints(
   }
   return out;
 }
+
+const TOWN_RADIUS = 360; // m: ab hier "im Ort" → Bevölkerungs-Drain
+const ZOMBIE_HP = 100;
+const ZOMBIE_SPEED = 6.5; // m/s
+const MAX_ZOMBIES = 600; // InstancedMesh-Kapazität
+
+export interface ZombieOpts {
+  center: THREE.Vector3;
+  spawnPoints: THREE.Vector3[];
+  terrain: TerrainSampler;
+}
+
+export class ZombieField {
+  positions: (THREE.Vector3 | null)[] = [];
+  private hp: number[] = [];
+  private mesh: THREE.InstancedMesh;
+  private dummy = new THREE.Object3D();
+  private count = 0;
+
+  constructor(scene: THREE.Scene, private opts: ZombieOpts) {
+    // Dunkle (kalte) Gestalt: Kapsel, fast schwarzes Material → im Wärmebild schwarz
+    const geom = new THREE.CapsuleGeometry(1.6, 3.2, 4, 8);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1, metalness: 0 });
+    this.mesh = new THREE.InstancedMesh(geom, mat, MAX_ZOMBIES);
+    this.mesh.name = "zombies";
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.count = 0;
+    this.mesh.frustumCulled = false;
+    scene.add(this.mesh);
+  }
+
+  spawnOne(rng: () => number): void {
+    if (this.count >= MAX_ZOMBIES) return;
+    const sp = pickSpawn(this.opts.spawnPoints as THREE.Vector3[], rng);
+    if (!sp) return;
+    this.positions.push(sp);
+    this.hp.push(ZOMBIE_HP);
+    this.count++;
+    this.mesh.count = this.count;
+  }
+
+  /** Bewegt lebende Zombies Richtung Zentrum, schreibt Instanz-Matrizen. */
+  update(dt: number): void {
+    const c = this.opts.center;
+    for (let i = 0; i < this.count; i++) {
+      const p = this.positions[i];
+      if (!p) continue;
+      moveToward(p, c, ZOMBIE_SPEED, dt);
+      p.y = this.opts.terrain.sample(p.x, p.z) + 3;
+      this.dummy.position.copy(p);
+      this.dummy.updateMatrix();
+      this.mesh.setMatrixAt(i, this.dummy.matrix);
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  /** Schaden auf eine Indexliste; tötet bei HP<=0 (versteckt Instanz). */
+  damageAt(indices: number[], dmg: number): number {
+    let killed = 0;
+    for (const i of indices) {
+      if (!this.positions[i]) continue;
+      this.hp[i] -= dmg;
+      if (this.hp[i] <= 0) {
+        this.positions[i] = null;
+        this.dummy.position.set(0, -10000, 0); // aus dem Bild
+        this.dummy.updateMatrix();
+        this.mesh.setMatrixAt(i, this.dummy.matrix);
+        killed++;
+      }
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+    return killed;
+  }
+
+  aliveCount(): number {
+    let n = 0;
+    for (const p of this.positions) if (p) n++;
+    return n;
+  }
+
+  inTownCount(): number {
+    const c = this.opts.center;
+    let n = 0;
+    for (const p of this.positions) {
+      if (!p) continue;
+      if (Math.hypot(p.x - c.x, p.z - c.z) <= TOWN_RADIUS) n++;
+    }
+    return n;
+  }
+}
