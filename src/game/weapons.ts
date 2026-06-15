@@ -46,6 +46,7 @@ export class Arsenal {
 
   spec(): WeaponSpec { return WEAPONS[this.active]; }
   ammoOf(id: WeaponId): number { return this.ammo[id]; }
+  lastShotOf(id: WeaponId): number { return this.lastShot[id]; }
   switchTo(id: WeaponId): void { this.active = id; }
 
   canFire(now: number): boolean {
