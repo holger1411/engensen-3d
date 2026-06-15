@@ -15,6 +15,8 @@ import { SolarSky } from "./sky";
 import { CloudSystem } from "./clouds";
 import { IssLayer } from "./iss";
 import { FlirMode } from "./flir";
+import { GameController } from "./game/zombieMode";
+import { buildForestSpawnPoints } from "./game/zombies";
 import type { FeatureCollection, Meta } from "./types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -117,7 +119,16 @@ async function main(): Promise<void> {
     } catch (e) {
       console.warn("Kein Gelände geladen, nutze flachen Boden:", (e as Error).message);
     }
-    scene.add(buildTerrainMesh(terrain, 12000, 240));
+    const terrainMesh = buildTerrainMesh(terrain, 12000, 240);
+    scene.add(terrainMesh);
+
+    // Zombie-Modus: Spawnpunkte aus Waldflächen + GameController an FLIR koppeln
+    const spawnPoints = buildForestSpawnPoints(areasFC, proj, terrain, 300, 2300);
+    const game = new GameController({
+      scene, camera, terrain, spawnPoints, raycastTargets: [terrainMesh],
+    });
+    flir.onToggle = (on) => (on ? game.start() : game.stop());
+
     scene.add(buildAreas(areasFC, proj, terrain));
     scene.add(buildRoads(roadsFC, proj, terrain));
 
@@ -176,6 +187,7 @@ async function main(): Promise<void> {
       const dt = clock.getDelta();
       if (flir.enabled) {
         flir.updateOrbit(dt); // AC-130-Orbit um Engensen
+        game.update(dt);
       } else {
         panFromKeys(dt);
         controls.update();
