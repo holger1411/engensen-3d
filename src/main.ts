@@ -127,10 +127,10 @@ async function main(): Promise<void> {
     const missionData = MISSIONS.map((m) => {
       const pr = proj.project(m.lon, m.lat);
       const center = new THREE.Vector3(pr.x, terrain.sample(pr.x, -pr.y), -pr.y);
-      let spawnPoints = buildForestSpawnPoints(areasFC, proj, terrain, 400, 2600, { x: center.x, z: center.z });
+      let spawnPoints = buildForestSpawnPoints(areasFC, proj, terrain, 750, 2600, { x: center.x, z: center.z });
       // Fallback: zu wenig Wald in der Nähe → Ring um den Ort
       if (spawnPoints.length < 16) {
-        spawnPoints = spawnPoints.concat(buildRingSpawnPoints({ x: center.x, z: center.z }, terrain, 850, 1500, 32));
+        spawnPoints = spawnPoints.concat(buildRingSpawnPoints({ x: center.x, z: center.z }, terrain, 950, 1600, 32));
       }
       return { mission: m, center, spawnPoints };
     });

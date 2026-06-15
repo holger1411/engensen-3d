@@ -9,7 +9,7 @@ import type { Mission } from "./missions";
 const SPAWN_START = 4.0;          // s zwischen Gruppen am Anfang
 const SPAWN_MIN = 1.0;            // s am Ende (ansteigend)
 const SPAWN_RAMP = 90;            // s bis zur Maximalrate
-const DRAIN_K = 0.85;            // Basis: Personen/s pro Zombie im Ort
+const DRAIN_K = 0.7;             // Basis: Personen/s pro Zombie im Ort
 const HIT_RADIUS = 8;            // m Direkttreffer-Radius am Zombie (gegen Tunneln)
 
 export interface MissionData {
