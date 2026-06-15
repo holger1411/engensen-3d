@@ -42,6 +42,53 @@ async function main(): Promise<void> {
   const homePos = camera.position.clone();
   const homeTarget = controls.target.clone();
 
+  // --- Tastatursteuerung: Pfeiltasten (und WASD) bewegen die Kamera über die Karte ---
+  const pressed = new Set<string>();
+  const MOVE_KEYS = new Set([
+    "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+    "w", "a", "s", "d", "W", "A", "S", "D",
+  ]);
+  const fwd = new THREE.Vector3();
+  const right = new THREE.Vector3();
+  const move = new THREE.Vector3();
+  /** Verschiebt Kamera und Blickziel gemeinsam in der Horizontalebene. */
+  function applyMove(fb: number, lr: number, dist: number): void {
+    if ((fb === 0 && lr === 0) || dist === 0) return;
+    camera.getWorldDirection(fwd);
+    fwd.y = 0;
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+    fwd.normalize();
+    right.set(-fwd.z, 0, fwd.x); // 90° nach rechts
+    move.set(0, 0, 0).addScaledVector(fwd, fb).addScaledVector(right, lr).normalize().multiplyScalar(dist);
+    camera.position.add(move);
+    controls.target.add(move);
+  }
+  const fbFromKeys = () =>
+    (pressed.has("ArrowUp") || pressed.has("w") || pressed.has("W") ? 1 : 0) -
+    (pressed.has("ArrowDown") || pressed.has("s") || pressed.has("S") ? 1 : 0);
+  const lrFromKeys = () =>
+    (pressed.has("ArrowRight") || pressed.has("d") || pressed.has("D") ? 1 : 0) -
+    (pressed.has("ArrowLeft") || pressed.has("a") || pressed.has("A") ? 1 : 0);
+  const nudge = () => THREE.MathUtils.clamp(controls.getDistance() * 0.14, 12, 2000);
+
+  window.addEventListener("keydown", (e) => {
+    if (!MOVE_KEYS.has(e.key)) return;
+    pressed.add(e.key);
+    e.preventDefault();
+    // sofortiger Schritt pro Tastendruck (auch für kurze Tipps spürbar)
+    const fb = (e.key === "ArrowUp" || e.key === "w" || e.key === "W" ? 1 : 0) - (e.key === "ArrowDown" || e.key === "s" || e.key === "S" ? 1 : 0);
+    const lr = (e.key === "ArrowRight" || e.key === "d" || e.key === "D" ? 1 : 0) - (e.key === "ArrowLeft" || e.key === "a" || e.key === "A" ? 1 : 0);
+    applyMove(fb, lr, nudge());
+  });
+  window.addEventListener("keyup", (e) => pressed.delete(e.key));
+
+  /** Dauerbewegung beim Halten der Taste. */
+  function panFromKeys(dt: number): void {
+    if (pressed.size === 0) return;
+    const speed = THREE.MathUtils.clamp(controls.getDistance() * 0.9, 80, 12000);
+    applyMove(fbFromKeys(), lrFromKeys(), speed * dt);
+  }
+
   try {
     setStatus("Lade Geodaten …");
     const [meta, buildingsFC, roadsFC, areasFC] = await Promise.all([
@@ -118,6 +165,7 @@ async function main(): Promise<void> {
     function animate(): void {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
+      panFromKeys(dt);
       controls.update();
       flights.update(dt);
       clouds.update(dt);
