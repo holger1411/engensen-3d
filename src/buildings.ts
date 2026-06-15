@@ -214,8 +214,10 @@ export function buildBuildings(fc: FeatureCollection, proj: Projection, terrain:
     // Auf die Geländehöhe des Schwerpunkts setzen (Welt-z = -Nord).
     const c = centroid(projected[0]);
     mesh.position.y = terrain.sample(c.x, -c.y) - 0.3; // leicht einsenken, kein Schweben
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    // Schatten nur nahe dem Zentrum (Schatten-Frustum) → Performance bei großem Radius.
+    const near = Math.hypot(c.x, c.y) < 900;
+    mesh.castShadow = near;
+    mesh.receiveShadow = near;
     mesh.userData.info = buildingInfo(f.properties, cat, height);
     // Nachtbeleuchtung: ~58 % der bewohnbaren Gebäude bekommen warmes Fensterlicht.
     mesh.userData.lit = cat !== "outbuilding" && hashNoise(seed * 9.4) < 0.58;

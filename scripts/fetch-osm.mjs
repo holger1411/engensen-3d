@@ -16,7 +16,7 @@ const OUT_DIR = join(__dirname, "..", "public", "data");
 
 // Zentrum Engensen (Nominatim, OSM node 414161264)
 const CENTER = { lat: 52.5003028, lon: 9.9442798 };
-const RADIUS_M = 1200; // ganzer Ort inkl. Randbereiche
+const RADIUS_M = 2500; // Ort + umgebende Landschaft (Wettmar, Rand Großburgwedel)
 
 const ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",

@@ -108,7 +108,7 @@ async function main(): Promise<void> {
     } catch (e) {
       console.warn("Kein Gelände geladen, nutze flachen Boden:", (e as Error).message);
     }
-    scene.add(buildTerrainMesh(terrain));
+    scene.add(buildTerrainMesh(terrain, 12000, 240));
     scene.add(buildAreas(areasFC, proj, terrain));
     scene.add(buildRoads(roadsFC, proj, terrain));
 
