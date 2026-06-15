@@ -57,7 +57,9 @@ const COMPASS = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"];
 const ORBIT_R = 1000; // m Abstand zu Engensen
 const ORBIT_H = 640; // m Flughöhe
 const ORBIT_PERIOD = 85; // s pro Umlauf (langsamer Linkskreis)
-const ORBIT_LOOK = new THREE.Vector3(0, 12, 0); // Ziel: Ortskern
+const ORBIT_CENTER = new THREE.Vector3(0, 12, 0); // Engensen-Mitte (Start-Blickziel)
+const LOOK_SENS = 0.0022; // Maus-Empfindlichkeit (rad/px)
+const PITCH_MIN = -1.5, PITCH_MAX = 0.25; // Neigung begrenzen
 
 export class FlirMode {
   enabled = false;
@@ -65,7 +67,13 @@ export class FlirMode {
   private pass: ShaderPass;
   private clock0 = 0;
   private orbitAngle = 0;
-  private saved = { pos: new THREE.Vector3(), target: new THREE.Vector3(), ctrl: true };
+  private saved = { pos: new THREE.Vector3(), target: new THREE.Vector3(), ctrl: true, fov: 55 };
+  // frei schwenkbarer Gimbal (Blickrichtung an Bord)
+  private aimYaw = 0; // 0 = Norden, im Uhrzeigersinn
+  private aimPitch = -0.4;
+  private dragging = false;
+  private lastX = 0;
+  private lastY = 0;
 
   constructor(
     private renderer: THREE.WebGLRenderer,
@@ -79,9 +87,37 @@ export class FlirMode {
     this.composer.addPass(this.pass);
     const size = renderer.getSize(new THREE.Vector2());
     this.setSize(size.x, size.y);
+    this.attachGimbal(renderer.domElement);
   }
 
-  /** Automatischer AC-130-Orbit um Engensen (nur im FLIR-Modus aufgerufen). */
+  /** Maus-Drag schwenkt/neigt die Gimbal-Kamera, Scrollen zoomt (nur im FLIR-Modus). */
+  private attachGimbal(dom: HTMLElement): void {
+    dom.addEventListener("pointerdown", (e) => {
+      if (!this.enabled) return;
+      this.dragging = true;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+    });
+    window.addEventListener("pointerup", () => (this.dragging = false));
+    window.addEventListener("pointermove", (e) => {
+      if (!this.enabled || !this.dragging) return;
+      const dx = e.clientX - this.lastX;
+      const dy = e.clientY - this.lastY;
+      this.lastX = e.clientX;
+      this.lastY = e.clientY;
+      this.aimYaw += dx * LOOK_SENS; // Drag rechts → Blick nach rechts schwenken
+      this.aimPitch = THREE.MathUtils.clamp(this.aimPitch - dy * LOOK_SENS, PITCH_MIN, PITCH_MAX);
+    });
+    dom.addEventListener("wheel", (e) => {
+      if (!this.enabled) return;
+      e.preventDefault();
+      this.camera.fov = THREE.MathUtils.clamp(this.camera.fov + e.deltaY * 0.03, 8, 55);
+      this.camera.updateProjectionMatrix();
+      this.updateLensLabel();
+    }, { passive: false });
+  }
+
+  /** Orbit-Position + frei eingestellte Blickrichtung (nur im FLIR-Modus). */
   updateOrbit(dt: number): void {
     this.orbitAngle += ((2 * Math.PI) / ORBIT_PERIOD) * dt;
     this.camera.position.set(
@@ -89,8 +125,15 @@ export class FlirMode {
       ORBIT_H,
       Math.sin(this.orbitAngle) * ORBIT_R,
     );
-    this.camera.lookAt(ORBIT_LOOK);
-    this.controls.target.copy(ORBIT_LOOK);
+    // Blickrichtung aus Yaw/Pitch (Welt: x=Ost, z=-Nord)
+    const cp = Math.cos(this.aimPitch);
+    const dir = new THREE.Vector3(cp * Math.sin(this.aimYaw), Math.sin(this.aimPitch), -cp * Math.cos(this.aimYaw));
+    this.camera.lookAt(this.camera.position.clone().add(dir));
+  }
+
+  private updateLensLabel(): void {
+    const el = document.getElementById("flir-lens");
+    if (el) el.textContent = this.camera.fov < 18 ? "NARO" : this.camera.fov < 35 ? "MEDM" : "WIDE";
   }
 
   setSize(w: number, h: number): void {
@@ -111,13 +154,22 @@ export class FlirMode {
       this.saved.pos.copy(this.camera.position);
       this.saved.target.copy(this.controls.target);
       this.saved.ctrl = this.controls.enabled;
+      this.saved.fov = this.camera.fov;
       this.controls.enabled = false;
       this.orbitAngle = Math.atan2(this.camera.position.z, this.camera.position.x);
+      // Gimbal zunächst auf den Ortskern ausrichten
+      const sp = new THREE.Vector3(Math.cos(this.orbitAngle) * ORBIT_R, ORBIT_H, Math.sin(this.orbitAngle) * ORBIT_R);
+      const dir = ORBIT_CENTER.clone().sub(sp).normalize();
+      this.aimYaw = Math.atan2(dir.x, -dir.z);
+      this.aimPitch = THREE.MathUtils.clamp(Math.asin(dir.y), PITCH_MIN, PITCH_MAX);
+      this.updateLensLabel();
     } else {
-      // vorherige Ansicht & Steuerung wiederherstellen
+      // vorherige Ansicht, Zoom & Steuerung wiederherstellen
       this.camera.position.copy(this.saved.pos);
       this.controls.target.copy(this.saved.target);
       this.camera.lookAt(this.saved.target);
+      this.camera.fov = this.saved.fov;
+      this.camera.updateProjectionMatrix();
       this.controls.enabled = this.saved.ctrl;
     }
   }
