@@ -28,3 +28,34 @@ describe("pickSpawn", () => {
     expect(pickSpawn([], () => 0.5)).toBeNull();
   });
 });
+
+import { buildForestSpawnPoints } from "./zombies";
+import { Projection } from "../geo";
+import type { FeatureCollection } from "../types";
+import { FLAT_TERRAIN } from "../terrain";
+
+describe("buildForestSpawnPoints", () => {
+  it("erzeugt nur Punkte aus Wald-/Wood-Flächen im Distanzring", () => {
+    const center = { lat: 52.5, lon: 9.94 };
+    const proj = new Projection(center);
+    // Polygon ~600 m östlich (außerhalb 250 m, innerhalb 2200 m)
+    const east = 9.94 + 600 / proj.metersPerDegLon;
+    const fc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", properties: { kind: "natural", value: "wood" },
+          geometry: { type: "Polygon", coordinates: [[[east, 52.5], [east + 0.001, 52.5], [east + 0.001, 52.501], [east, 52.5]]] } },
+        { type: "Feature", properties: { kind: "natural", value: "water" },
+          geometry: { type: "Polygon", coordinates: [[[east, 52.5], [east + 0.001, 52.5], [east, 52.501], [east, 52.5]]] } },
+      ],
+    };
+    const pts = buildForestSpawnPoints(fc, proj, FLAT_TERRAIN, 250, 2200);
+    expect(pts.length).toBeGreaterThan(0);
+    // alle aus Wald (Wasser ignoriert) und im Ring
+    for (const p of pts) {
+      const d = Math.hypot(p.x, p.z);
+      expect(d).toBeGreaterThanOrEqual(250);
+      expect(d).toBeLessThanOrEqual(2200);
+    }
+  });
+});
