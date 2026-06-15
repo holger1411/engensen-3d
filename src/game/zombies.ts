@@ -1,5 +1,33 @@
 // src/game/zombies.ts
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+
+const HIP_Y = 6; // Hüfthöhe (Bein-Drehpunkt) der humanoiden Zombie-Figur
+
+/** Quaderteil mit Bein-Markierung (aLeg/aLegSign) für die Vertex-Animation. */
+function zombiePart(w: number, h: number, d: number, x: number, y: number, z: number, leg: number, sign: number): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(w, h, d);
+  g.translate(x, y, z);
+  const n = g.attributes.position.count;
+  g.setAttribute("aLeg", new THREE.Float32BufferAttribute(new Array(n).fill(leg), 1));
+  g.setAttribute("aLegSign", new THREE.Float32BufferAttribute(new Array(n).fill(sign), 1));
+  return g;
+}
+
+/** Humanoide Zombie-Figur: Beine, Torso, Kopf, Arme (Beine sind animierbar). */
+function buildZombieGeometry(): THREE.BufferGeometry {
+  const parts = [
+    zombiePart(2.2, 6, 2.4, -1.6, 3, 0, 1, -1),    // linkes Bein (y 0..6)
+    zombiePart(2.2, 6, 2.4, 1.6, 3, 0, 1, 1),      // rechtes Bein
+    zombiePart(5.4, 5.6, 3, 0, 8.8, 0, 0, 0),      // Torso (y 6..11.6)
+    zombiePart(3, 3, 3, 0, 13.2, 0, 0, 0),         // Kopf
+    zombiePart(1.6, 5.4, 1.6, -3.5, 8.8, 0.4, 0, 0), // linker Arm (leicht vor)
+    zombiePart(1.6, 5.4, 1.6, 3.5, 8.8, 0.4, 0, 0),  // rechter Arm
+  ];
+  const merged = mergeGeometries(parts, false)!;
+  parts.forEach((p) => p.dispose());
+  return merged;
+}
 
 /** Bewegt pos horizontal Richtung target, ohne zu überschießen. */
 export function moveToward(pos: THREE.Vector3, target: THREE.Vector3, speed: number, dt: number): void {
@@ -71,12 +99,41 @@ export class ZombieField {
   private mesh: THREE.InstancedMesh;
   private dummy = new THREE.Object3D();
   private count = 0;
+  private time = 0;
+  private matShader: { uniforms: { uTime: { value: number } } } | null = null;
 
   constructor(scene: THREE.Scene, private opts: ZombieOpts) {
-    // Dunkle (kalte) Gestalt: Kapsel, fast schwarzes Material → im Wärmebild schwarz.
-    // Aus ~640 m Orbithöhe überhöht dargestellt, damit als Punkt erkennbar.
-    const geom = new THREE.CapsuleGeometry(3.5, 7, 4, 8);
+    // Humanoide, dunkle (kalte) Gestalt → im Wärmebild schwarz. Überhöht, damit
+    // aus ~640 m Orbithöhe erkennbar. Beine werden im Vertex-Shader animiert.
+    const geom = buildZombieGeometry();
+    // Pro Instanz eine zufällige Gangphase (desynchronisierter Gang)
+    const phases = new Float32Array(MAX_ZOMBIES);
+    for (let i = 0; i < MAX_ZOMBIES; i++) phases[i] = Math.random() * Math.PI * 2;
+    geom.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phases, 1));
+
     const mat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1, metalness: 0 });
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = { value: 0 };
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          "#include <common>",
+          "#include <common>\nuniform float uTime;\nattribute float aLeg;\nattribute float aLegSign;\nattribute float aPhase;",
+        )
+        .replace(
+          "#include <begin_vertex>",
+          `#include <begin_vertex>
+          if (aLeg > 0.5) {
+            float ang = sin(uTime * 6.0 + aPhase) * 0.6 * aLegSign;
+            float c = cos(ang); float s = sin(ang);
+            float ry = transformed.y - ${HIP_Y.toFixed(1)};
+            float rz = transformed.z;
+            transformed.y = ${HIP_Y.toFixed(1)} + ry * c - rz * s;
+            transformed.z = ry * s + rz * c;
+          }`,
+        );
+      this.matShader = shader as unknown as { uniforms: { uTime: { value: number } } };
+    };
+
     this.mesh = new THREE.InstancedMesh(geom, mat, MAX_ZOMBIES);
     this.mesh.name = "zombies";
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -95,15 +152,18 @@ export class ZombieField {
     this.mesh.count = this.count;
   }
 
-  /** Bewegt lebende Zombies Richtung Zentrum, schreibt Instanz-Matrizen. */
+  /** Bewegt lebende Zombies Richtung Zentrum, animiert Beine, schreibt Matrizen. */
   update(dt: number): void {
+    this.time += dt;
+    if (this.matShader) this.matShader.uniforms.uTime.value = this.time;
     const c = this.opts.center;
     for (let i = 0; i < this.count; i++) {
       const p = this.positions[i];
       if (!p) continue;
       moveToward(p, c, ZOMBIE_SPEED, dt);
-      p.y = this.opts.terrain.sample(p.x, p.z) + 6;
+      p.y = this.opts.terrain.sample(p.x, p.z);
       this.dummy.position.copy(p);
+      this.dummy.rotation.y = Math.atan2(c.x - p.x, c.z - p.z); // Blick Richtung Ort
       this.dummy.updateMatrix();
       this.mesh.setMatrixAt(i, this.dummy.matrix);
     }
