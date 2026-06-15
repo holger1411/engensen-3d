@@ -44,7 +44,7 @@ async function main(): Promise<void> {
   const homeTarget = controls.target.clone();
 
   // FLIR / Wärmebildmodus (Taste F oder Button)
-  const flir = new FlirMode(renderer, scene, camera);
+  const flir = new FlirMode(renderer, scene, camera, controls);
   document.getElementById("flir-toggle")?.addEventListener("click", () => flir.toggle());
   window.addEventListener("keydown", (e) => {
     if (e.key === "f" || e.key === "F") flir.toggle();
@@ -174,8 +174,12 @@ async function main(): Promise<void> {
     function animate(): void {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
-      panFromKeys(dt);
-      controls.update();
+      if (flir.enabled) {
+        flir.updateOrbit(dt); // AC-130-Orbit um Engensen
+      } else {
+        panFromKeys(dt);
+        controls.update();
+      }
       flights.update(dt);
       clouds.update(dt);
       flir.render(clock.elapsedTime); // rendert normal ODER im Wärmebildmodus

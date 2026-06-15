@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
@@ -52,16 +53,25 @@ const ThermalShader = {
 
 const COMPASS = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"];
 
+// AC-130-Orbit: Radius, Höhe, Umlaufzeit
+const ORBIT_R = 1000; // m Abstand zu Engensen
+const ORBIT_H = 640; // m Flughöhe
+const ORBIT_PERIOD = 85; // s pro Umlauf (langsamer Linkskreis)
+const ORBIT_LOOK = new THREE.Vector3(0, 12, 0); // Ziel: Ortskern
+
 export class FlirMode {
   enabled = false;
   private composer: EffectComposer;
   private pass: ShaderPass;
   private clock0 = 0;
+  private orbitAngle = 0;
+  private saved = { pos: new THREE.Vector3(), target: new THREE.Vector3(), ctrl: true };
 
   constructor(
     private renderer: THREE.WebGLRenderer,
     private scene: THREE.Scene,
     private camera: THREE.PerspectiveCamera,
+    private controls: OrbitControls,
   ) {
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
@@ -69,6 +79,18 @@ export class FlirMode {
     this.composer.addPass(this.pass);
     const size = renderer.getSize(new THREE.Vector2());
     this.setSize(size.x, size.y);
+  }
+
+  /** Automatischer AC-130-Orbit um Engensen (nur im FLIR-Modus aufgerufen). */
+  updateOrbit(dt: number): void {
+    this.orbitAngle += ((2 * Math.PI) / ORBIT_PERIOD) * dt;
+    this.camera.position.set(
+      Math.cos(this.orbitAngle) * ORBIT_R,
+      ORBIT_H,
+      Math.sin(this.orbitAngle) * ORBIT_R,
+    );
+    this.camera.lookAt(ORBIT_LOOK);
+    this.controls.target.copy(ORBIT_LOOK);
   }
 
   setSize(w: number, h: number): void {
@@ -83,6 +105,21 @@ export class FlirMode {
     const pois = this.scene.getObjectByName("pois");
     if (pois) pois.visible = !this.enabled; // Labels stören die Wärmebild-Optik
     document.getElementById("flir-toggle")?.classList.toggle("active", this.enabled);
+
+    if (this.enabled) {
+      // Ansicht sichern, manuelle Steuerung aus, Orbit beim aktuellen Winkel starten
+      this.saved.pos.copy(this.camera.position);
+      this.saved.target.copy(this.controls.target);
+      this.saved.ctrl = this.controls.enabled;
+      this.controls.enabled = false;
+      this.orbitAngle = Math.atan2(this.camera.position.z, this.camera.position.x);
+    } else {
+      // vorherige Ansicht & Steuerung wiederherstellen
+      this.camera.position.copy(this.saved.pos);
+      this.controls.target.copy(this.saved.target);
+      this.camera.lookAt(this.saved.target);
+      this.controls.enabled = this.saved.ctrl;
+    }
   }
 
   /** Rendert die Szene (im FLIR-Modus über den Composer) und aktualisiert das HUD. */
