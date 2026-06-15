@@ -64,6 +64,7 @@ export function buildForestSpawnPoints(
   terrain: TerrainSampler,
   minDist: number,
   maxDist: number,
+  center: { x: number; z: number } = { x: 0, z: 0 },
 ): THREE.Vector3[] {
   const out: THREE.Vector3[] = [];
   for (const f of fc.features) {
@@ -74,7 +75,7 @@ export function buildForestSpawnPoints(
     for (const [lon, lat] of ring) {
       const p = proj.project(lon, lat); // {x: Ost, y: Nord}
       const x = p.x, z = -p.y; // Welt: Nord → -Z
-      const d = Math.hypot(x, z);
+      const d = Math.hypot(x - center.x, z - center.z); // Distanz zum Missionsort
       if (d < minDist || d > maxDist) continue;
       out.push(new THREE.Vector3(x, terrain.sample(x, z), z));
     }
@@ -82,10 +83,30 @@ export function buildForestSpawnPoints(
   return out;
 }
 
+/** Fallback: Spawnpunkte auf einem Ring um den Ort (wenn kaum Wald in der Nähe). */
+export function buildRingSpawnPoints(
+  center: { x: number; z: number },
+  terrain: TerrainSampler,
+  rMin: number,
+  rMax: number,
+  count: number,
+  rng: () => number = Math.random,
+): THREE.Vector3[] {
+  const out: THREE.Vector3[] = [];
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2 + (rng() - 0.5) * 0.3;
+    const r = rMin + rng() * (rMax - rMin);
+    const x = center.x + Math.cos(a) * r;
+    const z = center.z + Math.sin(a) * r;
+    out.push(new THREE.Vector3(x, terrain.sample(x, z), z));
+  }
+  return out;
+}
+
 const TOWN_RADIUS = 360; // m: ab hier "im Ort" → Bevölkerungs-Drain
 const ZOMBIE_HP = 100;
-const ZOMBIE_SPEED = 6.5; // m/s
-const MAX_ZOMBIES = 900; // InstancedMesh-Kapazität
+const ZOMBIE_SPEED = 8.5; // m/s (Basistempo)
+const MAX_ZOMBIES = 1300; // InstancedMesh-Kapazität
 
 export interface ZombieOpts {
   center: THREE.Vector3;
@@ -100,6 +121,7 @@ export class ZombieField {
   private dummy = new THREE.Object3D();
   private count = 0;
   private time = 0;
+  private speedMul = 1;
   private matShader: { uniforms: { uTime: { value: number } } } | null = null;
 
   constructor(scene: THREE.Scene, private opts: ZombieOpts) {
@@ -171,6 +193,18 @@ export class ZombieField {
     this.mesh.count = this.count;
   }
 
+  /** Setzt das Feld für eine neue Mission zurück (neues Zentrum, Spawns, Tempo). */
+  reset(center: THREE.Vector3, spawnPoints: THREE.Vector3[], speedMul: number): void {
+    this.opts.center.copy(center);
+    this.opts.spawnPoints = spawnPoints;
+    this.speedMul = speedMul;
+    this.positions = [];
+    this.hp = [];
+    this.count = 0;
+    this.mesh.count = 0;
+    this.mesh.instanceMatrix.needsUpdate = true;
+  }
+
   /** Bewegt lebende Zombies Richtung Zentrum, animiert Beine, schreibt Matrizen. */
   update(dt: number): void {
     this.time += dt;
@@ -179,7 +213,7 @@ export class ZombieField {
     for (let i = 0; i < this.count; i++) {
       const p = this.positions[i];
       if (!p) continue;
-      moveToward(p, c, ZOMBIE_SPEED, dt);
+      moveToward(p, c, ZOMBIE_SPEED * this.speedMul, dt);
       p.y = this.opts.terrain.sample(p.x, p.z);
       this.dummy.position.copy(p);
       this.dummy.rotation.y = Math.atan2(c.x - p.x, c.z - p.z); // Blick Richtung Ort

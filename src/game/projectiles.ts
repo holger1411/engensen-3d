@@ -165,6 +165,16 @@ export class ProjectileManager {
     return splashTargets(point, radius, zombiePositions);
   }
 
+  /** Entfernt alle Geschosse und Effekte (z. B. beim Missionswechsel). */
+  clear(): void {
+    while (this.projectiles.length) this.disposeProj(this.projectiles.length - 1);
+    for (const f of this.fx) {
+      this.group.remove(f.sprite);
+      f.sprite.material.dispose();
+    }
+    this.fx = [];
+  }
+
   /** Sichtbare Einschlag-Explosion (heißer Blitz) am Punkt, Größe je Waffe. */
   boom(point: THREE.Vector3, weapon: WeaponId): void {
     if (this.fx.length >= MAX_FX) return;

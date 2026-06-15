@@ -57,7 +57,6 @@ const COMPASS = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"];
 const ORBIT_R = 1000; // m Abstand zu Engensen
 const ORBIT_H = 640; // m Flughöhe
 const ORBIT_PERIOD = 85; // s pro Umlauf (langsamer Linkskreis)
-const ORBIT_CENTER = new THREE.Vector3(0, 12, 0); // Engensen-Mitte (Start-Blickziel)
 const LOOK_SENS = 0.0022; // Maus-Empfindlichkeit (rad/px)
 const PITCH_MIN = -1.5, PITCH_MAX = 0.25; // Neigung begrenzen
 
@@ -72,6 +71,7 @@ export class FlirMode {
   // frei schwenkbarer Gimbal (Blickrichtung an Bord)
   private aimYaw = 0; // 0 = Norden, im Uhrzeigersinn
   private aimPitch = -0.4;
+  private orbitCenter = new THREE.Vector3(0, 0, 0); // umkreister Ort (Mission)
   private dragging = false;
   private lastX = 0;
   private lastY = 0;
@@ -118,13 +118,18 @@ export class FlirMode {
     }, { passive: false });
   }
 
+  /** Setzt den umkreisten Ort (Missions-Zentrum). */
+  setOrbitCenter(v: THREE.Vector3): void {
+    this.orbitCenter.copy(v);
+  }
+
   /** Orbit-Position + frei eingestellte Blickrichtung (nur im FLIR-Modus). */
   updateOrbit(dt: number): void {
     this.orbitAngle += ((2 * Math.PI) / ORBIT_PERIOD) * dt;
     this.camera.position.set(
-      Math.cos(this.orbitAngle) * ORBIT_R,
+      this.orbitCenter.x + Math.cos(this.orbitAngle) * ORBIT_R,
       ORBIT_H,
-      Math.sin(this.orbitAngle) * ORBIT_R,
+      this.orbitCenter.z + Math.sin(this.orbitAngle) * ORBIT_R,
     );
     // Blickrichtung aus Yaw/Pitch (Welt: x=Ost, z=-Nord)
     const cp = Math.cos(this.aimPitch);
@@ -157,10 +162,10 @@ export class FlirMode {
       this.saved.ctrl = this.controls.enabled;
       this.saved.fov = this.camera.fov;
       this.controls.enabled = false;
-      this.orbitAngle = Math.atan2(this.camera.position.z, this.camera.position.x);
+      this.orbitAngle = Math.atan2(this.camera.position.z - this.orbitCenter.z, this.camera.position.x - this.orbitCenter.x);
       // Gimbal zunächst auf den Ortskern ausrichten
-      const sp = new THREE.Vector3(Math.cos(this.orbitAngle) * ORBIT_R, ORBIT_H, Math.sin(this.orbitAngle) * ORBIT_R);
-      const dir = ORBIT_CENTER.clone().sub(sp).normalize();
+      const sp = new THREE.Vector3(this.orbitCenter.x + Math.cos(this.orbitAngle) * ORBIT_R, ORBIT_H, this.orbitCenter.z + Math.sin(this.orbitAngle) * ORBIT_R);
+      const dir = this.orbitCenter.clone().add(new THREE.Vector3(0, 12, 0)).sub(sp).normalize();
       this.aimYaw = Math.atan2(dir.x, -dir.z);
       this.aimPitch = THREE.MathUtils.clamp(Math.asin(dir.y), PITCH_MIN, PITCH_MAX);
       this.updateLensLabel();

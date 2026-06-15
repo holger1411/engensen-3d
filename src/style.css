@@ -241,6 +241,41 @@ body.flir #flir-hud { display: block; }
 }
 body.flir #game-flash { display: block; }
 
+/* Missionsauswahl */
+#game-missions {
+  position: fixed; inset: 0; z-index: 70;
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: rgba(0,0,0,0.55);
+  font-family: "Courier New", ui-monospace, monospace; color: #ededed;
+}
+body.flir #game-missions.show { display: flex; justify-content: flex-end; padding-bottom: 7vh; }
+.gm-title { font-size: 26px; letter-spacing: 4px; margin-bottom: 8px; text-shadow: 0 0 6px rgba(255,255,255,0.4); }
+
+/* Auswertung (Score + Statistik) */
+#game-stats {
+  position: fixed; top: 5vh; left: 50%; transform: translateX(-50%); z-index: 72;
+  display: none; min-width: 440px; padding: 18px 26px;
+  background: rgba(12,16,22,0.92); border: 1px solid rgba(255,255,255,0.25); border-radius: 12px;
+  font-family: "Courier New", ui-monospace, monospace; color: #ededed; text-align: center;
+}
+body.flir #game-stats.show { display: block; }
+.gs-title { font-size: 28px; font-weight: 800; letter-spacing: 3px; }
+.gs-title.win { color: #7fe0a0; }
+.gs-title.lose { color: #e98080; }
+.gs-score { font-size: 22px; margin: 6px 0 2px; color: #f2c14e; letter-spacing: 1px; }
+.gs-sub { font-size: 13px; color: #b9c2cf; margin-bottom: 12px; }
+.gs-table { margin: 0 auto; border-collapse: collapse; font-size: 14px; }
+.gs-table th, .gs-table td { padding: 5px 16px; text-align: right; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.gs-table th:first-child, .gs-table td:first-child { text-align: left; }
+.gs-table th { color: #9fb0c2; font-weight: 600; }
+.gm-btn {
+  min-width: 380px; padding: 14px 20px; cursor: pointer;
+  background: rgba(20,24,31,0.92); color: #ededed;
+  border: 1px solid rgba(255,255,255,0.25); border-radius: 10px;
+  font: inherit; font-size: 15px; letter-spacing: 1px; text-align: left;
+}
+.gm-btn:hover { background: #1d2a1d; border-color: #3f7a3f; color: #b6f0b6; }
+
 /* --- Reset-Knopf --- */
 #reset-view {
   position: fixed;

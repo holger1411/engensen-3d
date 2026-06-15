@@ -16,7 +16,8 @@ import { CloudSystem } from "./clouds";
 import { IssLayer } from "./iss";
 import { FlirMode } from "./flir";
 import { GameController } from "./game/zombieMode";
-import { buildForestSpawnPoints } from "./game/zombies";
+import { buildForestSpawnPoints, buildRingSpawnPoints } from "./game/zombies";
+import { MISSIONS } from "./game/missions";
 import type { FeatureCollection, Meta } from "./types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -122,10 +123,21 @@ async function main(): Promise<void> {
     const terrainMesh = buildTerrainMesh(terrain, 12000, 240);
     scene.add(terrainMesh);
 
-    // Zombie-Modus: Spawnpunkte aus Waldflächen + GameController an FLIR koppeln
-    const spawnPoints = buildForestSpawnPoints(areasFC, proj, terrain, 600, 2400);
+    // Zombie-Modus: pro Mission Zentrum + Wald-Spawnpunkte vorberechnen
+    const missionData = MISSIONS.map((m) => {
+      const pr = proj.project(m.lon, m.lat);
+      const center = new THREE.Vector3(pr.x, terrain.sample(pr.x, -pr.y), -pr.y);
+      let spawnPoints = buildForestSpawnPoints(areasFC, proj, terrain, 400, 2600, { x: center.x, z: center.z });
+      // Fallback: zu wenig Wald in der Nähe → Ring um den Ort
+      if (spawnPoints.length < 16) {
+        spawnPoints = spawnPoints.concat(buildRingSpawnPoints({ x: center.x, z: center.z }, terrain, 850, 1500, 32));
+      }
+      return { mission: m, center, spawnPoints };
+    });
     const game = new GameController({
-      scene, camera, terrain, spawnPoints, raycastTargets: [terrainMesh],
+      scene, camera, terrain, raycastTargets: [terrainMesh],
+      missions: missionData,
+      setOrbitCenter: (v) => flir.setOrbitCenter(v),
     });
     flir.onToggle = (on) => (on ? game.start() : game.stop());
     if (flir.enabled) game.start(); // Modus evtl. schon vor Spiel-Init aktiviert
