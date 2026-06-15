@@ -73,8 +73,9 @@ export class ZombieField {
   private count = 0;
 
   constructor(scene: THREE.Scene, private opts: ZombieOpts) {
-    // Dunkle (kalte) Gestalt: Kapsel, fast schwarzes Material → im Wärmebild schwarz
-    const geom = new THREE.CapsuleGeometry(1.6, 3.2, 4, 8);
+    // Dunkle (kalte) Gestalt: Kapsel, fast schwarzes Material → im Wärmebild schwarz.
+    // Aus ~640 m Orbithöhe überhöht dargestellt, damit als Punkt erkennbar.
+    const geom = new THREE.CapsuleGeometry(3.5, 7, 4, 8);
     const mat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1, metalness: 0 });
     this.mesh = new THREE.InstancedMesh(geom, mat, MAX_ZOMBIES);
     this.mesh.name = "zombies";
@@ -101,7 +102,7 @@ export class ZombieField {
       const p = this.positions[i];
       if (!p) continue;
       moveToward(p, c, ZOMBIE_SPEED, dt);
-      p.y = this.opts.terrain.sample(p.x, p.z) + 3;
+      p.y = this.opts.terrain.sample(p.x, p.z) + 6;
       this.dummy.position.copy(p);
       this.dummy.updateMatrix();
       this.mesh.setMatrixAt(i, this.dummy.matrix);

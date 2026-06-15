@@ -11,7 +11,7 @@ const SPAWN_MIN = 0.18;           // s am Ende (ansteigend)
 const SPAWN_RAMP = 90;            // s bis zur Maximalrate
 const START_POP = 1500;
 const DRAIN_K = 0.5;              // Personen/s pro Zombie im Ort
-const HIT_RADIUS = 4;            // m Direkttreffer-Radius am Zombie
+const HIT_RADIUS = 8;            // m Direkttreffer-Radius am Zombie (gegen Tunneln)
 
 export interface GameDeps {
   scene: THREE.Scene;

@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     scene.add(terrainMesh);
 
     // Zombie-Modus: Spawnpunkte aus Waldflächen + GameController an FLIR koppeln
-    const spawnPoints = buildForestSpawnPoints(areasFC, proj, terrain, 300, 2300);
+    const spawnPoints = buildForestSpawnPoints(areasFC, proj, terrain, 600, 2400);
     const game = new GameController({
       scene, camera, terrain, spawnPoints, raycastTargets: [terrainMesh],
     });
