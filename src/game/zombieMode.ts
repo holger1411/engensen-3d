@@ -1,6 +1,6 @@
 // src/game/zombieMode.ts
 import * as THREE from "three";
-import { Arsenal, WEAPONS } from "./weapons";
+import { Arsenal, WEAPONS, type WeaponId } from "./weapons";
 import { ProjectileManager } from "./projectiles";
 import { ZombieField, drainRate } from "./zombies";
 import type { TerrainSampler } from "../terrain";
@@ -34,6 +34,10 @@ export class GameController {
   private over: "" | "win" | "lose" = "";
   private raycaster = new THREE.Raycaster();
   private center = new THREE.Vector3(0, 0, 0);
+  // Waffen-Feedback: Mündungsfeuer, Vollbild-Weißblitz, Rückstoß-Rütteln
+  private muzzle = 0;
+  private flashWhite = 0;
+  private shake = 0;
 
   constructor(private deps: GameDeps) {
     this.projectiles = new ProjectileManager(deps.scene, deps.terrain);
@@ -93,6 +97,7 @@ export class GameController {
     if (this.firing && this.arsenal.canFire(this.elapsed)) {
       if (this.arsenal.fire(this.elapsed)) {
         this.projectiles.spawn(this.deps.camera.position, this.aimPoint(), this.arsenal.spec());
+        this.triggerFire(this.arsenal.active);
       }
     }
 
@@ -122,8 +127,43 @@ export class GameController {
     // Bevölkerungs-Drain
     this.pop = Math.max(0, this.pop - drainRate(this.zombies.inTownCount(), DRAIN_K) * dt);
 
+    this.applyFeedback(dt);
     this.updateHud();
     this.checkEnd();
+  }
+
+  /** Setzt Mündungsfeuer/Weißblitz/Rückstoß je Waffe beim Schuss. */
+  private triggerFire(w: WeaponId): void {
+    if (w === "gatling") {
+      this.muzzle = 0.45;
+      this.shake = Math.max(this.shake, 1.5);
+    } else if (w === "bofors") {
+      this.muzzle = 0.7;
+      this.flashWhite = Math.max(this.flashWhite, 0.16);
+      this.shake = Math.max(this.shake, 9);
+    } else {
+      this.muzzle = 0.9;
+      this.flashWhite = 1; // extrem kurzer Vollbild-Weißblitz
+      this.shake = Math.max(this.shake, 22);
+    }
+  }
+
+  /** Klingt Feedback ab und wendet es an (DOM-Overlays + Kamera-Rütteln). */
+  private applyFeedback(dt: number): void {
+    this.muzzle = Math.max(0, this.muzzle - dt * 6);
+    this.flashWhite = Math.max(0, this.flashWhite - dt * 8); // sehr kurz
+    this.shake = Math.max(0, this.shake - dt * 36);
+    const m = document.getElementById("game-muzzle");
+    if (m) m.style.opacity = this.muzzle.toFixed(3);
+    const fl = document.getElementById("game-flash");
+    if (fl) fl.style.opacity = this.flashWhite.toFixed(3);
+    if (this.shake > 0.02) {
+      const s = this.shake;
+      const p = this.deps.camera.position;
+      p.x += (Math.random() - 0.5) * s;
+      p.y += (Math.random() - 0.5) * s;
+      p.z += (Math.random() - 0.5) * s;
+    }
   }
 
   private checkEnd(): void {

@@ -228,6 +228,19 @@ body.flir #flir-hud { display: block; }
 }
 #game-banner.show { display: block; }
 
+/* Mündungsfeuer (Stichflamme) unten + Vollbild-Weißblitz (105 mm) */
+#game-muzzle {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 42%;
+  pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse 55% 100% at 50% 115%,
+    rgba(255,245,210,0.95), rgba(255,225,165,0.35) 38%, transparent 68%);
+}
+#game-flash {
+  position: fixed; inset: 0; background: #fff; opacity: 0;
+  pointer-events: none; z-index: 65; display: none;
+}
+body.flir #game-flash { display: block; }
+
 /* --- Reset-Knopf --- */
 #reset-view {
   position: fixed;

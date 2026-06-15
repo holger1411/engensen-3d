@@ -24,12 +24,12 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   bofors: {
     id: "bofors", name: "40mm", fullName: "40 mm Bofors L/60",
     maxAmmo: 256, fireIntervalSec: 1 / 1.7, muzzleVel: 880,
-    damage: 130, splashRadius: 9, spreadRad: 0.004, tracerColor: 0xffffff,
+    damage: 150, splashRadius: 20, spreadRad: 0.004, tracerColor: 0xffffff,
   },
   howitzer: {
     id: "howitzer", name: "105mm", fullName: "105 mm M102 Haubitze",
     maxAmmo: 100, fireIntervalSec: 7, muzzleVel: 494,
-    damage: 600, splashRadius: 32, spreadRad: 0.002, tracerColor: 0xffffff,
+    damage: 900, splashRadius: 65, spreadRad: 0.002, tracerColor: 0xffffff,
   },
 };
 

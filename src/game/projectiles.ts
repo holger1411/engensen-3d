@@ -72,8 +72,8 @@ function hotSprite(scale: number): THREE.Sprite {
 
 // Glühender Geschosskopf je Waffe (m) und Einschlag-Blitzgröße je Waffe (m).
 const HEAD_SIZE: Record<WeaponId, number> = { gatling: 5, bofors: 8, howitzer: 13 };
-const BOOM_SIZE: Record<WeaponId, number> = { gatling: 10, bofors: 24, howitzer: 55 };
-const BOOM_DUR: Record<WeaponId, number> = { gatling: 0.16, bofors: 0.28, howitzer: 0.5 };
+const BOOM_SIZE: Record<WeaponId, number> = { gatling: 10, bofors: 44, howitzer: 120 };
+const BOOM_DUR: Record<WeaponId, number> = { gatling: 0.16, bofors: 0.32, howitzer: 0.6 };
 
 interface Fx { sprite: THREE.Sprite; life: number; dur: number; size: number; }
 
