@@ -63,6 +63,7 @@ const PITCH_MIN = -1.5, PITCH_MAX = 0.25; // Neigung begrenzen
 
 export class FlirMode {
   enabled = false;
+  onToggle?: (enabled: boolean) => void;
   private composer: EffectComposer;
   private pass: ShaderPass;
   private clock0 = 0;
@@ -172,6 +173,11 @@ export class FlirMode {
       this.camera.updateProjectionMatrix();
       this.controls.enabled = this.saved.ctrl;
     }
+
+    // Flüge im Modus ausblenden (wie POIs)
+    const flights = this.scene.getObjectByName("flights");
+    if (flights) flights.visible = !this.enabled;
+    this.onToggle?.(this.enabled);
   }
 
   /** Rendert die Szene (im FLIR-Modus über den Composer) und aktualisiert das HUD. */
