@@ -19,7 +19,7 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   gatling: {
     id: "gatling", name: "25mm", fullName: "25 mm GAU-12 Gatling",
     maxAmmo: 3000, fireIntervalSec: 1 / 30, muzzleVel: 1040,
-    damage: 40, splashRadius: 3, spreadRad: 0.009, tracerColor: 0xffffff,
+    damage: 55, splashRadius: 7, spreadRad: 0.009, tracerColor: 0xffffff,
   },
   bofors: {
     id: "bofors", name: "40mm", fullName: "40 mm Bofors L/60",

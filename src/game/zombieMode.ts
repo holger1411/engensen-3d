@@ -104,15 +104,18 @@ export class GameController {
     for (let i = projs.length - 1; i >= 0; i--) {
       const hit = this.zombies.positions.findIndex((z) => z && z.distanceTo(projs[i].pos) <= HIT_RADIUS);
       if (hit >= 0) {
-        const spec = WEAPONS[projs[i].weapon];
+        const w = projs[i].weapon;
+        const spec = WEAPONS[w];
         const info = this.projectiles.remove(i);
         const idx = spec.splashRadius > 0 ? this.projectiles.splash(info.point, spec.splashRadius, zpos) : [hit];
         this.zombies.damageAt(idx, spec.damage);
+        this.projectiles.boom(info.point, w); // sichtbarer Einschlag
       }
     }
-    // Bodeneinschläge (Splash)
+    // Bodeneinschläge: jeder Einschlag detoniert sichtbar (auch Fehlschüsse) + Splash
     for (const imp of this.projectiles.update(dt)) {
       const spec = WEAPONS[imp.weapon];
+      this.projectiles.boom(imp.point, imp.weapon);
       if (spec.splashRadius > 0) this.zombies.damageAt(this.projectiles.splash(imp.point, spec.splashRadius, zpos), spec.damage);
     }
 
