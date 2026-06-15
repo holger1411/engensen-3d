@@ -128,6 +128,7 @@ async function main(): Promise<void> {
       scene, camera, terrain, spawnPoints, raycastTargets: [terrainMesh],
     });
     flir.onToggle = (on) => (on ? game.start() : game.stop());
+    if (flir.enabled) game.start(); // Modus evtl. schon vor Spiel-Init aktiviert
 
     scene.add(buildAreas(areasFC, proj, terrain));
     scene.add(buildRoads(roadsFC, proj, terrain));

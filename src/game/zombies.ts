@@ -152,6 +152,25 @@ export class ZombieField {
     this.mesh.count = this.count;
   }
 
+  /** Spawnt eine Gruppe von `count` Zombies eng um einen gemeinsamen Waldpunkt. */
+  spawnCluster(rng: () => number, count: number, spread: number): void {
+    const base = pickSpawn(this.opts.spawnPoints as THREE.Vector3[], rng);
+    if (!base) return;
+    for (let k = 0; k < count; k++) {
+      if (this.count >= MAX_ZOMBIES) break;
+      const p = new THREE.Vector3(
+        base.x + (rng() - 0.5) * 2 * spread,
+        0,
+        base.z + (rng() - 0.5) * 2 * spread,
+      );
+      p.y = this.opts.terrain.sample(p.x, p.z);
+      this.positions.push(p);
+      this.hp.push(ZOMBIE_HP);
+      this.count++;
+    }
+    this.mesh.count = this.count;
+  }
+
   /** Bewegt lebende Zombies Richtung Zentrum, animiert Beine, schreibt Matrizen. */
   update(dt: number): void {
     this.time += dt;

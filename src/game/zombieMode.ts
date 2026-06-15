@@ -6,8 +6,8 @@ import { ZombieField, drainRate } from "./zombies";
 import type { TerrainSampler } from "../terrain";
 
 const HORDE_TOTAL = 300;          // endliche Invasion
-const SPAWN_START = 1.0;          // s zwischen Spawns am Anfang
-const SPAWN_MIN = 0.18;           // s am Ende (ansteigend)
+const SPAWN_START = 4.5;          // s zwischen Gruppen am Anfang
+const SPAWN_MIN = 1.4;            // s am Ende (ansteigend)
 const SPAWN_RAMP = 90;            // s bis zur Maximalrate
 const START_POP = 1500;
 const DRAIN_K = 0.5;              // Personen/s pro Zombie im Ort
@@ -68,6 +68,14 @@ export class GameController {
     window.addEventListener("keyup", (e) => { if (e.code === "Space") this.firing = false; });
   }
 
+  /** Gemischte Gruppengrößen: Einzelgänger, kleine Trupps, große Horden. */
+  private groupSize(): number {
+    const r = Math.random();
+    if (r < 0.25) return 1 + Math.floor(Math.random() * 3); // 1–3 Einzelgänger
+    if (r < 0.7) return 4 + Math.floor(Math.random() * 6);  // 4–9 kleine Gruppe
+    return 10 + Math.floor(Math.random() * 12);             // 10–21 große Horde
+  }
+
   /** Zielpunkt = Schnittpunkt der Blickrichtung (Fadenkreuz) mit dem Gelände. */
   private aimPoint(): THREE.Vector3 {
     const dir = new THREE.Vector3();
@@ -82,12 +90,13 @@ export class GameController {
     if (!this.active || this.over) return;
     this.elapsed += dt;
 
-    // Spawn-Loop (ansteigende Rate)
+    // Spawn-Loop: Gruppen unterschiedlicher Größe (ansteigende Frequenz)
     if (this.spawned < HORDE_TOTAL) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
-        this.zombies.spawnOne(Math.random);
-        this.spawned++;
+        const size = this.groupSize();
+        this.zombies.spawnCluster(Math.random, size, 9 + size * 1.1);
+        this.spawned += size;
         const t = Math.min(1, this.elapsed / SPAWN_RAMP);
         this.spawnTimer = SPAWN_START + (SPAWN_MIN - SPAWN_START) * t;
       }
