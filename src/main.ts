@@ -14,11 +14,7 @@ import { FlightLayer } from "./flights";
 import { SolarSky } from "./sky";
 import { CloudSystem } from "./clouds";
 import { IssLayer } from "./iss";
-import { FlirMode } from "./flir";
 import { PostFX } from "./postfx";
-import { GameController } from "./game/zombieMode";
-import { buildForestSpawnPoints, buildRingSpawnPoints } from "./game/zombies";
-import { MISSIONS } from "./game/missions";
 import type { FeatureCollection, Meta } from "./types";
 
 const BASE = import.meta.env.BASE_URL;
@@ -47,30 +43,10 @@ async function main(): Promise<void> {
   const homePos = camera.position.clone();
   const homeTarget = controls.target.clone();
 
-  // FLIR / Wärmebildmodus (Taste F oder Button)
-  const flir = new FlirMode(renderer, scene, camera, controls);
-  document.getElementById("flir-toggle")?.addEventListener("click", () => flir.toggle());
-
-  // Pause (P) – friert Spiel/Orbit/Live-Layer ein und re-rendert nur das Standbild
-  let paused = false;
-  const pauseOverlay = document.getElementById("pause-overlay");
-  const togglePause = () => {
-    paused = !paused;
-    pauseOverlay?.classList.toggle("show", paused);
-  };
-
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "f" || e.key === "F") flir.toggle();
-    else if (e.key === "v" || e.key === "V") flir.toggleThermal(); // Wärmebild ↔ Farbsicht
-    else if (e.key === "p" || e.key === "P") togglePause();
-  });
-
-  // Postprocessing (SSAO/Bloom/SMAA) für den Normalmodus
+  // Postprocessing (SSAO/Bloom/SMAA)
   const postfx = new PostFX(renderer, scene, camera);
-  flir.renderBase = () => postfx.render();
 
   window.addEventListener("resize", () => {
-    flir.setSize(container.clientWidth, container.clientHeight);
     postfx.setSize(container.clientWidth, container.clientHeight);
   });
 
@@ -172,25 +148,6 @@ async function main(): Promise<void> {
     });
     scene.add(terrainMesh);
 
-    // Zombie-Modus: pro Mission Zentrum + Wald-Spawnpunkte vorberechnen
-    const missionData = MISSIONS.map((m) => {
-      const pr = proj.project(m.lon, m.lat);
-      const center = new THREE.Vector3(pr.x, terrain.sample(pr.x, -pr.y), -pr.y);
-      let spawnPoints = buildForestSpawnPoints(areasFC, proj, terrain, 750, 2600, { x: center.x, z: center.z });
-      // Fallback: zu wenig Wald in der Nähe → Ring um den Ort
-      if (spawnPoints.length < 16) {
-        spawnPoints = spawnPoints.concat(buildRingSpawnPoints({ x: center.x, z: center.z }, terrain, 950, 1600, 32));
-      }
-      return { mission: m, center, spawnPoints };
-    });
-    const game = new GameController({
-      scene, camera, terrain, raycastTargets: [terrainMesh],
-      missions: missionData,
-      setOrbitCenter: (v) => flir.setOrbitCenter(v),
-    });
-    flir.onToggle = (on) => (on ? game.start() : game.stop());
-    if (flir.enabled) game.start(); // Modus evtl. schon vor Spiel-Init aktiviert
-
     scene.add(buildAreas(areasFC, proj, terrain));
     scene.add(buildRoads(roadsFC, proj, terrain));
     scene.add(buildForestTrees(areasFC, proj, terrain));
@@ -248,21 +205,12 @@ async function main(): Promise<void> {
     function animate(): void {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
-      if (paused) {
-        flir.render(clock.elapsedTime); // Standbild halten (dt verworfen → kein Sprung beim Fortsetzen)
-        return;
-      }
       updateSunShadow();
-      if (flir.enabled) {
-        flir.updateOrbit(dt); // AC-130-Orbit um Engensen
-        game.update(dt);
-      } else {
-        panFromKeys(dt);
-        controls.update();
-      }
+      panFromKeys(dt);
+      controls.update();
       flights.update(dt);
       clouds.update(dt);
-      flir.render(clock.elapsedTime); // rendert normal ODER im Wärmebildmodus
+      postfx.render();
     }
     animate();
   } catch (err) {
