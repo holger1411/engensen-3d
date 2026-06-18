@@ -189,6 +189,20 @@ body.flir #flir-hud { display: block; }
   background: repeating-linear-gradient(rgba(0,0,0,0.18) 0 1px, transparent 1px 3px);
   mix-blend-mode: multiply;
 }
+/* Farb-/Tagsicht (V): Scanlines aus, da sie über Farbbild stören. */
+body.view-normal .flir-scan { display: none; }
+
+/* Pause-Overlay (Taste P) */
+#pause-overlay { display: none; position: fixed; inset: 0; z-index: 60;
+  background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);
+  align-items: center; justify-content: center; }
+#pause-overlay.show { display: flex; }
+#pause-overlay .pause-box {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  font: 700 44px/1 system-ui, sans-serif; letter-spacing: 4px; color: #fff;
+  text-shadow: 0 2px 16px rgba(0,0,0,0.8);
+}
+#pause-overlay .pause-box span { font: 500 14px/1 system-ui, sans-serif; letter-spacing: 2px; opacity: 0.7; }
 .fh { position: absolute; white-space: nowrap; }
 .fh.tl { top: 16px; left: 20px; }
 .fh.tr { top: 16px; right: 22px; text-align: right; }
@@ -275,6 +289,18 @@ body.flir #game-stats.show { display: block; }
   font: inherit; font-size: 15px; letter-spacing: 1px; text-align: left;
 }
 .gm-btn:hover { background: #1d2a1d; border-color: #3f7a3f; color: #b6f0b6; }
+/* Tastenbelegung im Auswahlbildschirm */
+.gm-keys {
+  margin-top: 14px; display: grid; grid-template-columns: auto auto; gap: 6px 14px;
+  align-items: center; font-size: 13px; color: #c4ccd6;
+}
+.gm-key { display: contents; }
+.gm-key kbd {
+  justify-self: end; min-width: 78px; text-align: center; padding: 3px 8px;
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 6px; font: inherit; font-size: 12px; letter-spacing: 1px; color: #ededed;
+}
+.gm-key span { justify-self: start; }
 
 /* --- Reset-Knopf --- */
 #reset-view {

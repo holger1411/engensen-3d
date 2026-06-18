@@ -95,6 +95,30 @@ export class GameController {
       b.addEventListener("click", () => this.startMission(i));
       el.append(b);
     });
+
+    // Tastenbelegung
+    const keys = document.createElement("div");
+    keys.className = "gm-keys";
+    const controls: [string, string][] = [
+      ["Leertaste", "Feuern"],
+      ["1 · 2 · 3", "25 / 40 / 105 mm"],
+      ["Maus ziehen", "Zielen"],
+      ["Mausrad", "Zoom"],
+      ["V", "Wärmebild ↔ Farbe"],
+      ["P", "Pause"],
+      ["F", "Modus verlassen"],
+    ];
+    for (const [k, label] of controls) {
+      const row = document.createElement("div");
+      row.className = "gm-key";
+      const kk = document.createElement("kbd");
+      kk.textContent = k;
+      const lab = document.createElement("span");
+      lab.textContent = label;
+      row.append(kk, lab);
+      keys.append(row);
+    }
+    el.append(keys);
   }
   private showSelector(show = true): void {
     document.getElementById("game-missions")?.classList.toggle("show", show);

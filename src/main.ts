@@ -50,8 +50,19 @@ async function main(): Promise<void> {
   // FLIR / Wärmebildmodus (Taste F oder Button)
   const flir = new FlirMode(renderer, scene, camera, controls);
   document.getElementById("flir-toggle")?.addEventListener("click", () => flir.toggle());
+
+  // Pause (P) – friert Spiel/Orbit/Live-Layer ein und re-rendert nur das Standbild
+  let paused = false;
+  const pauseOverlay = document.getElementById("pause-overlay");
+  const togglePause = () => {
+    paused = !paused;
+    pauseOverlay?.classList.toggle("show", paused);
+  };
+
   window.addEventListener("keydown", (e) => {
     if (e.key === "f" || e.key === "F") flir.toggle();
+    else if (e.key === "v" || e.key === "V") flir.toggleThermal(); // Wärmebild ↔ Farbsicht
+    else if (e.key === "p" || e.key === "P") togglePause();
   });
 
   // Postprocessing (SSAO/Bloom/SMAA) für den Normalmodus
@@ -237,6 +248,10 @@ async function main(): Promise<void> {
     function animate(): void {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
+      if (paused) {
+        flir.render(clock.elapsedTime); // Standbild halten (dt verworfen → kein Sprung beim Fortsetzen)
+        return;
+      }
       updateSunShadow();
       if (flir.enabled) {
         flir.updateOrbit(dt); // AC-130-Orbit um Engensen

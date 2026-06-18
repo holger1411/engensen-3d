@@ -64,6 +64,8 @@ const PITCH_MIN = -1.5, PITCH_MAX = 0.25; // Neigung begrenzen
 
 export class FlirMode {
   enabled = false;
+  /** Wärmebild-Effekt aktiv? Im Modus per V umschaltbar (Farb-/Tagsicht). */
+  thermal = true;
   onToggle?: (enabled: boolean) => void;
   /** Render-Funktion für den Normalmodus (z. B. Postprocessing). Fallback: direkt. */
   renderBase?: () => void;
@@ -127,6 +129,19 @@ export class FlirMode {
     this.orbitCenter.copy(v);
   }
 
+  /** Im Modus zwischen Wärmebild und normaler Farbsicht umschalten (Taste V). */
+  toggleThermal(): void {
+    if (!this.enabled) return;
+    this.thermal = !this.thermal;
+    document.body.classList.toggle("view-normal", !this.thermal);
+    this.updateSensorLabel();
+  }
+
+  private updateSensorLabel(): void {
+    const el = document.getElementById("flir-sensor");
+    if (el) el.textContent = this.thermal ? "WHOT" : "DAY-TV";
+  }
+
   /** Orbit-Position + frei eingestellte Blickrichtung (nur im FLIR-Modus). */
   updateOrbit(dt: number): void {
     this.orbitAngle += ((2 * Math.PI) / ORBIT_PERIOD) * dt;
@@ -154,7 +169,10 @@ export class FlirMode {
 
   toggle(): void {
     this.enabled = !this.enabled;
+    this.thermal = true; // jeder Moduswechsel startet im Wärmebild
     document.body.classList.toggle("flir", this.enabled);
+    document.body.classList.remove("view-normal");
+    this.updateSensorLabel();
     const pois = this.scene.getObjectByName("pois");
     if (pois) pois.visible = !this.enabled; // Labels stören die Wärmebild-Optik
     document.getElementById("flir-toggle")?.classList.toggle("active", this.enabled);
@@ -191,15 +209,15 @@ export class FlirMode {
 
   /** Rendert die Szene (im FLIR-Modus über den Composer) und aktualisiert das HUD. */
   render(elapsed: number): void {
-    if (this.enabled) {
+    if (this.enabled && this.thermal) {
       this.pass.uniforms.uTime.value = elapsed;
       this.composer.render();
-      this.updateHud(elapsed);
     } else if (this.renderBase) {
       this.renderBase();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+    if (this.enabled) this.updateHud(elapsed);
   }
 
   private updateHud(elapsed: number): void {
