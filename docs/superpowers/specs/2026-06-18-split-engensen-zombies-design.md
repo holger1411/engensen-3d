@@ -70,6 +70,50 @@ Wird in beiden Repos vorhanden sein und danach getrennt gepflegt:
 **Tests:** `src/game/weapons.test.ts`, `projectiles.test.ts`, `zombies.test.ts`
 ziehen mit um; `geo.test.ts` ebenfalls (Fundament).
 
+**Spiel-eigene Assets:** `public/splash.jpg` (KI-generiertes Titelbild via
+kie.ai Flux-Kontext) und `scripts/gen-splash.mjs` (Regenerierung). Diese liegen
+aktuell im `engensen`-Arbeitsbaum und werden beim Split ins Spiel-Repo
+übernommen und im Original wieder entfernt.
+
+## Splash-/Titelscreen (Horde30938)
+
+Beim Laden des Spiels erscheint ein Vollbild-Titelscreen:
+
+- Hintergrund: `public/splash.jpg` (AC-130 über dem Dorf).
+- Titel „HORDE30938" + kurze Story-Zeile (Horde überfällt PLZ-Gebiet 30938).
+- „Spiel starten"-Button. Klick blendet den Splash aus und betritt den
+  Spielmodus (FLIR + Missionsauswahl) — ersetzt den bisherigen Umweg über den
+  „Zombie-Modus"-Button als primären Einstieg.
+- Eigenes DOM-Overlay (`#splash`) + CSS; Logik in `main.ts` (oder kleinem
+  `splash.ts`). Kein Einfluss auf die Spiellogik.
+
+## Datengebiet & Endlevel Großburgwedel
+
+**Gebietserweiterung:** Großburgwedel (Zentrum ≈ 52.4928, 9.8736) liegt
+~4,9 km vom Engensen-Zentrum entfernt — außerhalb des aktuellen 3500-m-Radius.
+Für das Endlevel wird das Datengebiet erweitert:
+
+- `scripts/fetch-osm.mjs`: `RADIUS_M` 3500 → **6000** (Großburgwedel komplett
+  abgedeckt, ~12 km Kantenlänge). Danach `npm run fetch-osm`,
+  `fetch-terrain`, `fetch-satellite` neu backen.
+- Tradeoff: Bei gleichem 4096-px-Luftbild sinkt die Auflösung auf ~3 m/px;
+  Terrain-Raster `GRID` 48 → **64** anheben, um die Auflösung zu halten. Aus
+  AC-130-Orbithöhe ist die gröbere Luftbildauflösung akzeptabel.
+- Die größere Datenmenge (mehr Gebäude) wird in beiden Repos dupliziert; das
+  reine `engensen`-Experiment profitiert ebenfalls vom größeren Gebiet.
+
+**Mission Großburgwedel (Endlevel):**
+
+- Neue Mission `grossburgwedel`, ~10 000 Einwohner, größte Horde, höchste
+  Schwierigkeit — als letzter Eintrag in `MISSIONS`.
+- **Freischaltung:** erst spielbar, wenn die fünf kleineren Missionen
+  (Engensen, Thönse, Lahberg, Wettmar, Oldhorst) gewonnen wurden.
+- **Fortschritt persistent** via `localStorage` (gewonnene Missions-IDs). Im
+  Auswahlbildschirm wird Großburgwedel bis dahin als „🔒 gesperrt" angezeigt
+  (Button deaktiviert, Hinweis „Erst alle Dörfer retten").
+- Beim Gewinn einer Mission wird ihre ID gespeichert; sobald alle fünf erledigt
+  sind, entsperrt sich das Endlevel.
+
 ## Repo `engensen` (Original, bereinigt)
 
 **Entfernen:**
@@ -107,9 +151,10 @@ ziehen mit um; `geo.test.ts` ebenfalls (Fundament).
 
 ## Erfolgskriterien
 
-- `horde30938`: baut & testet grün, Spiel startet, Missionen wählbar,
-  FLIR/Black-Hot funktioniert; keine toten Importe/DOM-Referenzen auf entfernte
-  Module.
+- `horde30938`: baut & testet grün, Titelscreen erscheint und startet ins
+  Spiel, Missionen wählbar, FLIR/Black-Hot funktioniert; Großburgwedel ist als
+  Endlevel vorhanden und erst nach den fünf Dörfern freigeschaltet (Fortschritt
+  übersteht Reload); keine toten Importe/DOM-Referenzen auf entfernte Module.
 - `engensen`: baut & testet grün, 3D-Karte mit Live-Daten läuft, kein
   Wärmebild-/Spiel-Einstieg mehr, keine toten Referenzen.
 - Beide Repos unabhängig lauffähig.
