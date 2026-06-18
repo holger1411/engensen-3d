@@ -36,13 +36,14 @@ const ThermalShader = {
       // Vegetation (grün) und Himmel/Wasser (blau) erscheinen kühl = dunkel
       float green = clamp((c.g - max(c.r, c.b)) * 2.5, 0.0, 1.0);
       float blue  = clamp((c.b - max(c.r, c.g)) * 2.0, 0.0, 1.0);
-      // Landschaft anheben: dunkle Luftbild-Texturen über Gamma < 1 aufhellen,
-      // Vegetation/Wasser nur leicht kühlen → dunkle Zombie-Silhouetten bleiben sichtbar.
-      float heat = lum * 1.25 - green * 0.12 - blue * 0.28;
-      heat = pow(clamp(heat, 0.0, 1.0), 0.55);
+      // Black-Hot: Landschaft kräftig anheben (starkes Gamma), Vegetation/Wasser
+      // nur leicht kühlen. Tote Zombies sind pixel-schwarz (lum≈0) und bleiben
+      // dank tiefem Schwarzpunkt dunkel → klare Silhouette gegen helle Umgebung.
+      float heat = lum * 1.3 - green * 0.1 - blue * 0.25;
+      heat = pow(clamp(heat, 0.0, 1.0), 0.42);              // hebt dunkle Flächen (Wald) an
       float v = mix(1.0 - heat, heat, uWhiteHot);
-      v = clamp((v - 0.5) * 1.38 + 0.5, 0.0, 1.0);          // höherer Kontrast
-      v = v * 0.9 + 0.12;                                   // hellere Landschaft, kein reines Schwarz
+      v = clamp((v - 0.42) * 1.5 + 0.5, 0.0, 1.0);          // Kontrast, Mitten hell
+      v = v * 0.96 + 0.04;                                  // sehr tiefer Schwarzpunkt für Zombies
       float n = hash(vUv * uRes + uTime * 60.0);
       v += (n - 0.5) * 0.09;                                // Bildrauschen
       v *= 0.94 + 0.06 * sin(vUv.y * uRes.y * 0.7);         // Scanlines

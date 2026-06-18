@@ -125,15 +125,16 @@ export class ZombieField {
   private matShader: { uniforms: { uTime: { value: number } } } | null = null;
 
   constructor(scene: THREE.Scene, private opts: ZombieOpts) {
-    // Humanoide, dunkle (kalte) Gestalt → im Wärmebild schwarz. Überhöht, damit
-    // aus ~640 m Orbithöhe erkennbar. Beine werden im Vertex-Shader animiert.
+    // Tote Gestalt = keine Körperwärme → im FLIR tiefschwarz (Black-Hot). Material
+    // unbeleuchtet, damit die Pixel garantiert 0 sind und sich gegen die hellere
+    // Landschaft abheben. Überhöht für ~640 m Orbithöhe; Beine im Vertex-Shader.
     const geom = buildZombieGeometry();
     // Pro Instanz eine zufällige Gangphase (desynchronisierter Gang)
     const phases = new Float32Array(MAX_ZOMBIES);
     for (let i = 0; i < MAX_ZOMBIES; i++) phases[i] = Math.random() * Math.PI * 2;
     geom.setAttribute("aPhase", new THREE.InstancedBufferAttribute(phases, 1));
 
-    const mat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1, metalness: 0 });
+    const mat = new THREE.MeshBasicMaterial({ color: 0x000000, fog: false });
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uTime = { value: 0 };
       shader.vertexShader = shader.vertexShader
