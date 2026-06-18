@@ -47,6 +47,7 @@ export class GameController {
   private muzzle = 0;
   private flashWhite = 0;
   private shake = 0;
+  private breachT = 0; // > 0 → Bevölkerung sinkt gerade (Durchbruch-Warnblinken)
   // Statistik
   private missionIndex = 0;
   private shots: Record<WeaponId, number> = { gatling: 0, bofors: 0, howitzer: 0 };
@@ -235,8 +236,11 @@ export class GameController {
       }
     }
 
-    // Bevölkerungs-Drain
+    // Bevölkerungs-Drain – nur wenn Zombies im Ort-Radius sind (sonst Rate 0)
+    const popBefore = this.pop;
     this.pop = Math.max(0, this.pop - drainRate(this.zombies.inTownCount(), this.drainK) * dt);
+    if (this.pop < popBefore - 1e-4) this.breachT = 0.9; // Durchbruch → Warnblinken
+    this.breachT = Math.max(0, this.breachT - dt);
 
     this.applyFeedback(dt);
     this.updateHud();
@@ -334,7 +338,12 @@ export class GameController {
 
   private updateHud(): void {
     const set = (id: string, v: string) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-    set("game-pop", `POP ${Math.ceil(this.pop)}`);
+    const breach = this.breachT > 0;
+    const popEl = document.getElementById("game-pop");
+    if (popEl) {
+      popEl.textContent = breach ? `⚠ DURCHBRUCH · POP ${Math.ceil(this.pop)}` : `POP ${Math.ceil(this.pop)}`;
+      popEl.classList.toggle("breach", breach);
+    }
     set("game-zombies", `⛬ ${this.zombies.aliveCount()}`);
     set("game-weapon", this.arsenal.spec().name);
     set("game-ammo", String(this.arsenal.ammoOf(this.arsenal.active)));
