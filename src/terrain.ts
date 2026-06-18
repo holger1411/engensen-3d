@@ -88,8 +88,20 @@ export function makeTerrain(d: TerrainData, center: { lat: number; lon: number }
   return new GridTerrain(d, center);
 }
 
-/** Erzeugt das sichtbare Gelände-Mesh (überhöht, eingefärbt). */
-export function buildTerrainMesh(sampler: TerrainSampler, size = 3000, segments = 160): THREE.Mesh {
+export interface TerrainMeshOptions {
+  /** Luftbild-Textur (optional). */
+  texture?: THREE.Texture | null;
+  /** Kantenlänge des vom Luftbild abgedeckten Bereichs in Metern (= 2·Radius). */
+  textureExtent?: number;
+}
+
+/** Erzeugt das sichtbare Gelände-Mesh (überhöht, mit Luftbild oder Volltonfarbe). */
+export function buildTerrainMesh(
+  sampler: TerrainSampler,
+  size = 3000,
+  segments = 160,
+  opts: TerrainMeshOptions = {},
+): THREE.Mesh {
   const geom = new THREE.PlaneGeometry(size, size, segments, segments);
   geom.rotateX(-Math.PI / 2);
   const pos = geom.attributes.position as THREE.BufferAttribute;
@@ -101,7 +113,25 @@ export function buildTerrainMesh(sampler: TerrainSampler, size = 3000, segments 
   pos.needsUpdate = true;
   geom.computeVertexNormals();
 
-  const mat = new THREE.MeshStandardMaterial({ color: 0x86a05c, roughness: 1, metalness: 0 });
+  let mat: THREE.MeshStandardMaterial;
+  if (opts.texture) {
+    // UV so legen, dass das Luftbild exakt den abgedeckten Bereich (textureExtent)
+    // mittig auf dem (größeren) Mesh abbildet; außerhalb wird der Rand geklemmt.
+    const ext = opts.textureExtent ?? size;
+    const uv = geom.attributes.uv as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      uv.setXY(i, (x + ext / 2) / ext, (-z + ext / 2) / ext); // v: +Nord (−z) nach oben
+    }
+    uv.needsUpdate = true;
+    opts.texture.wrapS = opts.texture.wrapT = THREE.ClampToEdgeWrapping;
+    opts.texture.colorSpace = THREE.SRGBColorSpace;
+    opts.texture.anisotropy = 8;
+    mat = new THREE.MeshStandardMaterial({ map: opts.texture, color: 0xb9bdb0, roughness: 1, metalness: 0 });
+  } else {
+    mat = new THREE.MeshStandardMaterial({ color: 0x86a05c, roughness: 1, metalness: 0 });
+  }
   const mesh = new THREE.Mesh(geom, mat);
   mesh.receiveShadow = true;
   mesh.name = "terrain";

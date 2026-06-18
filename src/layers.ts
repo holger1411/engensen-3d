@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { Projection, hashNoise, type Vec2 } from "./geo";
+import { Projection, hashNoise, ringArea, type Vec2 } from "./geo";
 import type { FeatureCollection } from "./types";
 import type { TerrainSampler } from "./terrain";
 
@@ -14,30 +14,51 @@ const ROAD_WIDTH: Record<string, number> = {
 };
 const roadWidth = (t?: string) => ROAD_WIDTH[t || ""] ?? 4;
 
-const ROAD_COLOR = 0x40434a;
-const PATH_COLOR = 0x8a7a5c;
+// Belag-Farbe je highway-Typ → Bündel mit gemeinsamer Farbe.
+const ASPHALT = 0x44474e; // Asphalt (Haupt-/Wohnstraßen)
+const SERVICE_COLOR = 0x55585f; // Erschließung
+const TRACK_COLOR = 0x9a875f; // Feldweg (Erde)
+const PATH_COLOR = 0xb59a6e; // Fuß-/Radweg (heller Kies)
+const LINE_COLOR = 0xd8d2bf; // Mittel-/Randlinie
+
+const MAJOR = new Set(["motorway", "trunk", "primary", "secondary", "tertiary"]);
 
 /** Baut Straßenbänder aus LineStrings, auf das Gelände drapiert. */
 export function buildRoads(fc: FeatureCollection, proj: Projection, terrain: TerrainSampler): THREE.Group {
   const group = new THREE.Group();
   group.name = "roads";
 
-  const positions: number[] = [];
-  const pathPositions: number[] = [];
+  // Positionen nach Belag bündeln (wenige Draw-Calls).
+  const asphalt: number[] = [];
+  const service: number[] = [];
+  const track: number[] = [];
+  const path: number[] = [];
+  const centerLines: number[] = [];
 
   for (const f of fc.features) {
     if (f.geometry.type !== "LineString") continue;
     const pts = proj.projectRing(f.geometry.coordinates as number[][]).map(toWorld);
     if (pts.length < 2) continue;
-    const hw = f.properties.highway;
-    const isPath = hw === "footway" || hw === "path" || hw === "cycleway" || hw === "track";
+    const hw = f.properties.highway || "";
     const half = roadWidth(hw) / 2;
-    const target = isPath ? pathPositions : positions;
+    let target = asphalt;
+    if (hw === "footway" || hw === "path" || hw === "cycleway") target = path;
+    else if (hw === "track") target = track;
+    else if (hw === "service" || hw === "living_street") target = service;
     emitRibbon(pts, half, target);
+    // Mittellinie für größere Straßen
+    if (MAJOR.has(hw)) emitRibbon(pts, 0.22, centerLines);
   }
 
-  if (positions.length) group.add(ribbonMesh(positions, ROAD_COLOR, 0.5, -4, terrain));
-  if (pathPositions.length) group.add(ribbonMesh(pathPositions, PATH_COLOR, 0.45, -3, terrain));
+  if (asphalt.length) group.add(ribbonMesh(asphalt, ASPHALT, 0.5, -4, terrain));
+  if (service.length) group.add(ribbonMesh(service, SERVICE_COLOR, 0.5, -4, terrain));
+  if (track.length) group.add(ribbonMesh(track, TRACK_COLOR, 0.45, -3, terrain));
+  if (path.length) group.add(ribbonMesh(path, PATH_COLOR, 0.45, -3, terrain));
+  if (centerLines.length) {
+    const line = ribbonMesh(centerLines, LINE_COLOR, 0.75, -6, terrain);
+    line.renderOrder = 3;
+    group.add(line);
+  }
   return group;
 }
 
@@ -93,6 +114,71 @@ const AREA_COLORS: Record<string, number> = {
   golf_course: 0x6fa85a, fairway: 0x6fb35a, green: 0x57a84e, // Golfplatz Burgwedel
 };
 
+// Flächen sind halbtransparente Tönungen ÜBER dem Luftbild (mehr Farbe/Struktur,
+// Bild scheint durch). Manche bewirtschafteten Flächen etwas kräftiger.
+const AREA_OPACITY: Record<string, number> = {
+  forest: 0.5, wood: 0.5, water: 1, pitch: 0.7, sports_centre: 0.7,
+  green: 0.7, fairway: 0.6, golf_course: 0.5, cemetery: 0.5, parking: 0.7,
+};
+const areaOpacity = (key: string) => AREA_OPACITY[key] ?? 0.34;
+
+/**
+ * Animiertes Wasser: Fresnel-aufgehellte Tiefe + wandernde Glitzer-Wellen.
+ * uTime wird per onBeforeRender selbst aktualisiert (keine Loop-Verdrahtung).
+ */
+function makeWaterMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uTime: { value: 0 },
+        uDeep: { value: new THREE.Color(0x274b63) },
+        uShallow: { value: new THREE.Color(0x4a86a8) },
+        uSky: { value: new THREE.Color(0xbfe0f5) },
+      },
+    ]),
+    side: THREE.DoubleSide,
+    fog: true,
+    transparent: true,
+    vertexShader: /* glsl */ `
+      varying vec3 vWorld;
+      varying vec3 vNormalW;
+      #include <fog_pars_vertex>
+      void main(){
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorld = wp.xyz;
+        vNormalW = normalize(mat3(modelMatrix) * normal);
+        vec4 mvPosition = viewMatrix * wp;
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      uniform float uTime;
+      uniform vec3 uDeep, uShallow, uSky;
+      varying vec3 vWorld;
+      varying vec3 vNormalW;
+      #include <fog_pars_fragment>
+      float wave(vec2 p){
+        return sin(p.x*0.35 + uTime*1.1) * 0.5 + sin(p.y*0.27 - uTime*0.8) * 0.5
+             + sin((p.x+p.y)*0.5 + uTime*1.7) * 0.4;
+      }
+      void main(){
+        vec3 viewDir = normalize(cameraPosition - vWorld);
+        float fres = pow(1.0 - clamp(dot(viewDir, vNormalW), 0.0, 1.0), 3.0);
+        vec3 base = mix(uDeep, uShallow, 0.4 + 0.25 * sin(vWorld.x*0.05));
+        vec3 col = mix(base, uSky, clamp(fres*1.3, 0.0, 0.85));
+        float w = wave(vWorld.xz);
+        float spark = smoothstep(1.1, 1.45, w);          // helle Glitzerkämme
+        col += spark * 0.35;
+        gl_FragColor = vec4(col, 0.9);
+        #include <fog_fragment>
+      }
+    `,
+  });
+}
+
 /** Baut eingefärbte Flächen aus Polygonen, auf das Gelände drapiert. */
 export function buildAreas(fc: FeatureCollection, proj: Projection, terrain: TerrainSampler): THREE.Group {
   const group = new THREE.Group();
@@ -129,22 +215,123 @@ export function buildAreas(fc: FeatureCollection, proj: Projection, terrain: Ter
     pos.needsUpdate = true;
     geom.computeVertexNormals();
 
-    const mat = new THREE.MeshStandardMaterial({
-      color,
-      roughness: isWater ? 0.3 : 0.95,
-      metalness: isWater ? 0.1 : 0,
-      side: THREE.DoubleSide,
-      polygonOffset: true,
-      polygonOffsetFactor: -1,
-      polygonOffsetUnits: -1,
-    });
-    const mesh = new THREE.Mesh(geom, mat);
+    let mesh: THREE.Mesh;
+    if (isWater) {
+      const mat = makeWaterMaterial();
+      mesh = new THREE.Mesh(geom, mat);
+      mesh.onBeforeRender = () => { mat.uniforms.uTime.value = performance.now() / 1000; };
+    } else {
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.95,
+        metalness: 0,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: areaOpacity(key),
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+      mesh = new THREE.Mesh(geom, mat);
+    }
     mesh.renderOrder = 1;
-    mesh.receiveShadow = true;
+    mesh.receiveShadow = !isWater;
     group.add(mesh);
     i++;
   }
 
+  return group;
+}
+
+// --- Wald: gestreute Baum-Instanzen (InstancedMesh) --------------------------
+
+/** Punkt-in-Polygon (Ray-Casting) im XZ-Raum. */
+function pointInRing(x: number, z: number, ring: THREE.Vector2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i].x, zi = ring[i].y, xj = ring[j].x, zj = ring[j].y;
+    if (((zi > z) !== (zj > z)) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+const FOREST_KEYS = new Set(["forest", "wood"]);
+
+/**
+ * Streut Bäume als zwei InstancedMeshes (Stamm + Krone) in Wald-Polygone.
+ * Dichte ~1 Baum / 220 m², gedeckelt für Performance.
+ */
+export function buildForestTrees(fc: FeatureCollection, proj: Projection, terrain: TerrainSampler, maxTrees = 9000): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "forest";
+
+  type Inst = { x: number; z: number; y: number; s: number; rot: number };
+  const insts: Inst[] = [];
+
+  for (const f of fc.features) {
+    if (f.geometry.type !== "Polygon") continue;
+    const key = (f.properties.value || f.properties.kind || "") as string;
+    if (!FOREST_KEYS.has(key)) continue;
+    const rings = (f.geometry.coordinates as number[][][]).map((r) => proj.projectRing(r).map(toWorld));
+    const outer = rings[0];
+    if (!outer || outer.length < 3) continue;
+    const holes = rings.slice(1);
+
+    // Bounding-Box → Raster mit jitter, Punkt-in-Polygon-Test
+    let minx = Infinity, maxx = -Infinity, minz = Infinity, maxz = -Infinity;
+    for (const p of outer) { minx = Math.min(minx, p.x); maxx = Math.max(maxx, p.x); minz = Math.min(minz, p.y); maxz = Math.max(maxz, p.y); }
+    const area = ringArea(outer);
+    const want = Math.min(900, Math.floor(area / 220));
+    const step = Math.max(7, Math.sqrt((area / Math.max(1, want))));
+    let seed = minx * 0.13 + minz * 0.71;
+    for (let x = minx; x < maxx; x += step) {
+      for (let z = minz; z < maxz; z += step) {
+        seed += 1;
+        const jx = x + (hashNoise(seed) - 0.5) * step * 0.9;
+        const jz = z + (hashNoise(seed * 1.7) - 0.5) * step * 0.9;
+        if (!pointInRing(jx, jz, outer)) continue;
+        if (holes.some((h) => pointInRing(jx, jz, h))) continue;
+        insts.push({ x: jx, z: jz, y: terrain.sample(jx, -jz), s: 0.7 + hashNoise(seed * 2.3) * 0.8, rot: hashNoise(seed * 3.1) * Math.PI * 2 });
+        if (insts.length >= maxTrees) break;
+      }
+      if (insts.length >= maxTrees) break;
+    }
+    if (insts.length >= maxTrees) break;
+  }
+
+  if (insts.length === 0) return group;
+
+  const trunkGeom = new THREE.CylinderGeometry(0.22, 0.32, 2.4, 5);
+  trunkGeom.translate(0, 1.2, 0);
+  const crownGeom = new THREE.ConeGeometry(2.2, 6.0, 7);
+  crownGeom.translate(0, 5.2, 0);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5e4326, roughness: 1 });
+  const crownMat = new THREE.MeshStandardMaterial({ color: 0x3f6a35, roughness: 0.95 });
+
+  const trunks = new THREE.InstancedMesh(trunkGeom, trunkMat, insts.length);
+  const crowns = new THREE.InstancedMesh(crownGeom, crownMat, insts.length);
+  trunks.castShadow = crowns.castShadow = true;
+  const mtx = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const scl = new THREE.Vector3();
+  const posv = new THREE.Vector3();
+  const crownTint = new THREE.Color();
+  for (let i = 0; i < insts.length; i++) {
+    const t = insts[i];
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot);
+    scl.set(t.s, t.s, t.s);
+    posv.set(t.x, t.y, t.z);
+    mtx.compose(posv, q, scl);
+    trunks.setMatrixAt(i, mtx);
+    crowns.setMatrixAt(i, mtx);
+    crownTint.setHSL(0.27 + (hashNoise(i * 5.5) - 0.5) * 0.04, 0.4, 0.3 + hashNoise(i * 7.3) * 0.12);
+    crowns.setColorAt(i, crownTint);
+  }
+  trunks.instanceMatrix.needsUpdate = true;
+  crowns.instanceMatrix.needsUpdate = true;
+  if (crowns.instanceColor) crowns.instanceColor.needsUpdate = true;
+  group.add(trunks, crowns);
   return group;
 }
 

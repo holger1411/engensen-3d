@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { createScene } from "./scene";
 import { Projection } from "./geo";
 import { buildBuildings } from "./buildings";
-import { buildRoads, buildAreas, buildDetails } from "./layers";
+import { buildRoads, buildAreas, buildDetails, buildForestTrees } from "./layers";
 import { buildPois } from "./poi";
 import { makeTerrain, buildTerrainMesh, FLAT_TERRAIN, type TerrainData, type TerrainSampler } from "./terrain";
 import { InfoPanel } from "./infoPanel";
@@ -15,6 +15,7 @@ import { SolarSky } from "./sky";
 import { CloudSystem } from "./clouds";
 import { IssLayer } from "./iss";
 import { FlirMode } from "./flir";
+import { PostFX } from "./postfx";
 import { GameController } from "./game/zombieMode";
 import { buildForestSpawnPoints, buildRingSpawnPoints } from "./game/zombies";
 import { MISSIONS } from "./game/missions";
@@ -52,7 +53,34 @@ async function main(): Promise<void> {
   window.addEventListener("keydown", (e) => {
     if (e.key === "f" || e.key === "F") flir.toggle();
   });
-  window.addEventListener("resize", () => flir.setSize(container.clientWidth, container.clientHeight));
+
+  // Postprocessing (SSAO/Bloom/SMAA) für den Normalmodus
+  const postfx = new PostFX(renderer, scene, camera);
+  flir.renderBase = () => postfx.render();
+
+  window.addEventListener("resize", () => {
+    flir.setSize(container.clientWidth, container.clientHeight);
+    postfx.setSize(container.clientWidth, container.clientHeight);
+  });
+
+  // Adaptiver Schatten: Frustum folgt dem Blickziel, Größe nach Zoom-Abstand
+  // (pragmatische Alternative zu CSM bei live wanderndem Tag/Nacht-Sonnenstand).
+  const sunDir = new THREE.Vector3();
+  function updateSunShadow(): void {
+    const sun = bundle.sun;
+    sunDir.copy(sun.position).sub(sun.target.position);
+    if (sunDir.lengthSq() < 1e-3) return;
+    sunDir.normalize();
+    const focus = controls.target;
+    sun.target.position.copy(focus);
+    sun.position.copy(focus).addScaledVector(sunDir, 1500);
+    sun.target.updateMatrixWorld();
+    const s = THREE.MathUtils.clamp(controls.getDistance() * 0.75, 350, 2600);
+    const cam = sun.shadow.camera;
+    cam.left = -s; cam.right = s; cam.top = s; cam.bottom = -s;
+    cam.far = 5000;
+    cam.updateProjectionMatrix();
+  }
 
   // --- Tastatursteuerung: Pfeiltasten (und WASD) bewegen die Kamera über die Karte ---
   const pressed = new Set<string>();
@@ -120,7 +148,17 @@ async function main(): Promise<void> {
     } catch (e) {
       console.warn("Kein Gelände geladen, nutze flachen Boden:", (e as Error).message);
     }
-    const terrainMesh = buildTerrainMesh(terrain, 12000, 240);
+    // Luftbild-Textur (optional) laden – deckt den Datenradius (2·radius_m) ab.
+    let satTexture: THREE.Texture | null = null;
+    try {
+      satTexture = await new THREE.TextureLoader().loadAsync(BASE + "data/satellite.jpg");
+    } catch (e) {
+      console.warn("Kein Luftbild geladen:", (e as Error).message);
+    }
+    const terrainMesh = buildTerrainMesh(terrain, 12000, 240, {
+      texture: satTexture,
+      textureExtent: (meta.radius_m ?? 3500) * 2,
+    });
     scene.add(terrainMesh);
 
     // Zombie-Modus: pro Mission Zentrum + Wald-Spawnpunkte vorberechnen
@@ -144,6 +182,7 @@ async function main(): Promise<void> {
 
     scene.add(buildAreas(areasFC, proj, terrain));
     scene.add(buildRoads(roadsFC, proj, terrain));
+    scene.add(buildForestTrees(areasFC, proj, terrain));
 
     setStatus(`Baue ${meta.counts.buildings} Gebäude …`);
     const { group, meshes } = buildBuildings(buildingsFC, proj, terrain);
@@ -198,6 +237,7 @@ async function main(): Promise<void> {
     function animate(): void {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
+      updateSunShadow();
       if (flir.enabled) {
         flir.updateOrbit(dt); // AC-130-Orbit um Engensen
         game.update(dt);

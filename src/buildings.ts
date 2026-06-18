@@ -5,6 +5,8 @@ import type { TerrainSampler } from "./terrain";
 
 const LEVEL_HEIGHT = 3; // m pro Stockwerk
 const MIN_FOOTPRINT_AREA = 4; // m² — winzige Artefakte verwerfen
+const FACADE_TILE_W = 3.4; // m je Fenster-Achse (horizontale Kachelung)
+const FACADE_TILE_H = 3.0; // m je Stockwerk (vertikale Kachelung)
 
 /** Kategorie eines Gebäudes anhand von OSM-Tags. */
 type Category = "worship" | "fire" | "public" | "farm" | "outbuilding" | "residential";
@@ -151,15 +153,181 @@ function buildingInfo(p: Record<string, string | undefined>, cat: Category, heig
   };
 }
 
-/** Erzeugt eine THREE.Shape aus projizierten Ringen (outer + Löcher). */
-function shapeFromRings(rings: Vec2[][]): THREE.Shape | null {
-  const [outer, ...holes] = rings;
-  if (!outer || outer.length < 3) return null;
-  const shape = new THREE.Shape(outer.map((p) => new THREE.Vector2(p.x, p.y)));
-  for (const hole of holes) {
-    if (hole.length >= 3) shape.holes.push(new THREE.Path(hole.map((p) => new THREE.Vector2(p.x, p.y))));
+// --- Fassaden-Texturen (Fenster/Türen) ---------------------------------------
+// Eine geteilte, kachelbare Kachel (eine Fenster-Achse × ein Stockwerk).
+// Die hellen Wandflächen werden mit der Gebäude-Grundfarbe multipliziert; das
+// Glas erscheint dunkel-recessed. Eine zweite Maske leuchtet nachts nur im Glas.
+let FACADE_CACHE: { facade: THREE.Texture; mask: THREE.Texture; black: THREE.Texture } | null = null;
+
+function makeFacadeTextures(): { facade: THREE.Texture; mask: THREE.Texture; black: THREE.Texture } {
+  if (FACADE_CACHE) return FACADE_CACHE;
+  const S = 128;
+  // Fenster-Geometrie innerhalb der Kachel (0..1)
+  const wx0 = 0.26, wx1 = 0.74, wy0 = 0.22, wy1 = 0.82; // Glasfläche
+  const fr = 0.035; // Rahmenbreite
+
+  // 1) Fassade (Farb-Map): helle Wand + dunkles Glas + heller Rahmen + Sprosse
+  const fc = document.createElement("canvas");
+  fc.width = fc.height = S;
+  const g = fc.getContext("2d")!;
+  g.fillStyle = "#d2cdc2"; // helle Wand (wird mit Gebäudefarbe multipliziert)
+  g.fillRect(0, 0, S, S);
+  g.fillStyle = "#ece7dc"; // Rahmen
+  g.fillRect(wx0 * S, wy0 * S, (wx1 - wx0) * S, (wy1 - wy0) * S);
+  g.fillStyle = "#33414f"; // Glas (kühl, dunkel)
+  g.fillRect((wx0 + fr) * S, (wy0 + fr) * S, (wx1 - wx0 - 2 * fr) * S, (wy1 - wy0 - 2 * fr) * S);
+  g.strokeStyle = "#dcd6ca"; // Sprosse (Kreuz)
+  g.lineWidth = Math.max(1, S * 0.012);
+  g.beginPath();
+  g.moveTo(((wx0 + wx1) / 2) * S, (wy0 + fr) * S);
+  g.lineTo(((wx0 + wx1) / 2) * S, (wy1 - fr) * S);
+  g.moveTo((wx0 + fr) * S, ((wy0 + wy1) / 2) * S);
+  g.lineTo((wx1 - fr) * S, ((wy0 + wy1) / 2) * S);
+  g.stroke();
+  const facade = new THREE.CanvasTexture(fc);
+  facade.colorSpace = THREE.SRGBColorSpace;
+
+  // 2) Fenstermaske (Emissive-Map): nur Glas hell → leuchtet nachts
+  const mc = document.createElement("canvas");
+  mc.width = mc.height = S;
+  const m = mc.getContext("2d")!;
+  m.fillStyle = "#000000";
+  m.fillRect(0, 0, S, S);
+  m.fillStyle = "#fff2d8"; // warmes Fensterlicht
+  m.fillRect((wx0 + fr) * S, (wy0 + fr) * S, (wx1 - wx0 - 2 * fr) * S, (wy1 - wy0 - 2 * fr) * S);
+  const mask = new THREE.CanvasTexture(mc);
+  mask.colorSpace = THREE.SRGBColorSpace;
+
+  // 3) 1×1 schwarz (Dach bekommt keine Emissive-Glut)
+  const bc = document.createElement("canvas");
+  bc.width = bc.height = 1;
+  const b = bc.getContext("2d")!;
+  b.fillStyle = "#000000";
+  b.fillRect(0, 0, 1, 1);
+  const black = new THREE.CanvasTexture(bc);
+
+  for (const t of [facade, mask]) {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 4;
   }
-  return shape;
+  FACADE_CACHE = { facade, mask, black };
+  return FACADE_CACHE;
+}
+
+// --- Geometrie: Wände + geneigte Dächer --------------------------------------
+
+/** Footprint-Punkt (y=Nord) → Welt-XZ (Norden → −Z). */
+const worldXZ = (p: Vec2): THREE.Vector2 => new THREE.Vector2(p.x, -p.y);
+
+interface MeshArrays {
+  pos: number[];
+  uv: number[];
+}
+const tri = (a: number[], b: number[], c: number[], out: MeshArrays, uvA: number[], uvB: number[], uvC: number[]) => {
+  out.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+  out.uv.push(uvA[0], uvA[1], uvB[0], uvB[1], uvC[0], uvC[1]);
+};
+
+/** Senkrechte Wandflächen entlang eines geschlossenen Rings (0 → eaveH). */
+function emitWalls(ring: THREE.Vector2[], eaveH: number, out: MeshArrays): void {
+  let cum = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    const len = a.distanceTo(b);
+    if (len < 1e-4) continue;
+    const u0 = cum / FACADE_TILE_W;
+    const u1 = (cum + len) / FACADE_TILE_W;
+    const v1 = eaveH / FACADE_TILE_H;
+    const a0 = [a.x, 0, a.y], b0 = [b.x, 0, b.y];
+    const a1 = [a.x, eaveH, a.y], b1 = [b.x, eaveH, b.y];
+    tri(a0, b0, b1, out, [u0, 0], [u1, 0], [u1, v1]);
+    tri(a0, b1, a1, out, [u0, 0], [u1, v1], [u0, v1]);
+    cum += len;
+  }
+}
+
+/** Orientiertes Bounding-Rechteck (Min-Fläche) über Winkel-Abtastung. */
+function obb(ring: THREE.Vector2[]): { c: THREE.Vector2; u: THREE.Vector2; v: THREE.Vector2; hu: number; hv: number; fill: number } {
+  let best = { area: Infinity, ang: 0, minx: 0, maxx: 0, miny: 0, maxy: 0 };
+  for (let k = 0; k < 30; k++) {
+    const ang = (k / 30) * (Math.PI / 2);
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+    for (const p of ring) {
+      const x = p.x * ca + p.y * sa;
+      const y = -p.x * sa + p.y * ca;
+      if (x < minx) minx = x; if (x > maxx) maxx = x;
+      if (y < miny) miny = y; if (y > maxy) maxy = y;
+    }
+    const area = (maxx - minx) * (maxy - miny);
+    if (area < best.area) best = { area, ang, minx, maxx, miny, maxy };
+  }
+  const ca = Math.cos(best.ang), sa = Math.sin(best.ang);
+  // Rück-Rotation der Achsen in Weltkoordinaten: lokal→Welt = R(+ang)
+  const ux = ca, uy = sa; // lokale +x-Achse in Welt
+  const vx = -sa, vy = ca; // lokale +y-Achse in Welt
+  const cxLocal = (best.minx + best.maxx) / 2;
+  const cyLocal = (best.miny + best.maxy) / 2;
+  const c = new THREE.Vector2(cxLocal * ca - cyLocal * sa, cxLocal * sa + cyLocal * ca);
+  let w = best.maxx - best.minx;
+  let h = best.maxy - best.miny;
+  // u = lange Achse
+  let u = new THREE.Vector2(ux, uy), v = new THREE.Vector2(vx, vy), hu = w / 2, hv = h / 2;
+  if (h > w) { u = new THREE.Vector2(vx, vy); v = new THREE.Vector2(ux, uy); hu = h / 2; hv = w / 2; }
+  return { c, u, v, hu, hv, fill: best.area > 0 ? ringArea(ring) / best.area : 0 };
+}
+
+type RoofShape = "flat" | "gabled" | "hipped";
+
+function roofShape(p: Record<string, string | undefined>, cat: Category, fill: number): RoofShape {
+  const tag = (p["roof:shape"] || "").toLowerCase();
+  if (tag === "flat") return "flat";
+  if (["gabled", "gambrel", "round", "skillion", "saltbox"].includes(tag)) return "gabled";
+  if (["hipped", "half-hipped", "pyramidal", "mansard", "dome", "conical"].includes(tag)) return "hipped";
+  if (cat === "outbuilding") return "flat";
+  if (cat === "worship") return "hipped"; // Spitzdach/Turm
+  // ohne Tag: rechteckig → Satteldach, sonst Walmdach
+  return fill > 0.72 ? "gabled" : "hipped";
+}
+
+/** Satteldach über dem orientierten Rechteck (mit kleinem Überstand). */
+function emitGableRoof(o: ReturnType<typeof obb>, eaveH: number, rh: number, out: MeshArrays): void {
+  const ov = 0.4; // Dachüberstand m
+  const hu = o.hu + ov, hv = o.hv + ov;
+  const C = o.c, u = o.u, v = o.v;
+  const P = (su: number, sv: number, y: number) => [C.x + u.x * hu * su + v.x * hv * sv, y, C.y + u.y * hu * su + v.y * hv * sv];
+  const ridgeY = eaveH + rh;
+  const Pmp = P(-1, 1, eaveH), Ppp = P(1, 1, eaveH), Pmm = P(-1, -1, eaveH), Ppm = P(1, -1, eaveH);
+  const Rp = [C.x + u.x * hu, ridgeY, C.y + u.y * hu];
+  const Rm = [C.x - u.x * hu, ridgeY, C.y - u.y * hu];
+  const z: number[] = [0, 0];
+  // Traufseiten (+v / −v)
+  tri(Pmp, Ppp, Rp, out, z, z, z); tri(Pmp, Rp, Rm, out, z, z, z);
+  tri(Ppm, Pmm, Rm, out, z, z, z); tri(Ppm, Rm, Rp, out, z, z, z);
+  // Giebel (+u / −u)
+  tri(Ppp, Ppm, Rp, out, z, z, z);
+  tri(Pmm, Pmp, Rm, out, z, z, z);
+}
+
+/** Walmdach/Pyramide: jede Außenkante zur Firstspitze über dem Schwerpunkt. */
+function emitHipRoof(ring: THREE.Vector2[], cWorld: THREE.Vector2, eaveH: number, rh: number, out: MeshArrays): void {
+  const apex = [cWorld.x, eaveH + rh, cWorld.y];
+  const z: number[] = [0, 0];
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    tri([a.x, eaveH, a.y], [b.x, eaveH, b.y], apex, out, z, z, z);
+  }
+}
+
+/** Flaches Dach (Deckel) als Triangle-Fan über dem Ring. */
+function emitFlatRoof(ring: THREE.Vector2[], cWorld: THREE.Vector2, eaveH: number, out: MeshArrays): void {
+  const ctr = [cWorld.x, eaveH, cWorld.y];
+  const z: number[] = [0, 0];
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i], b = ring[(i + 1) % ring.length];
+    tri([a.x, eaveH, a.y], [b.x, eaveH, b.y], ctr, out, z, z, z);
+  }
 }
 
 export interface BuildingsResult {
@@ -175,6 +343,7 @@ export function buildBuildings(fc: FeatureCollection, proj: Projection, terrain:
   const group = new THREE.Group();
   group.name = "buildings";
   const meshes: THREE.Mesh[] = [];
+  const tex = makeFacadeTextures();
 
   for (const f of fc.features) {
     if (f.geometry.type !== "Polygon") continue;
@@ -182,46 +351,72 @@ export function buildBuildings(fc: FeatureCollection, proj: Projection, terrain:
     const projected = rings.map((r) => proj.projectRing(r));
     if (projected.length === 0 || ringArea(projected[0]) < MIN_FOOTPRINT_AREA) continue;
 
-    const shape = shapeFromRings(projected);
-    if (!shape) continue;
+    // Ringe → Welt-XZ; Außenring konsistent orientieren (für saubere Dächer).
+    const worldRings = projected.map((r) => r.map(worldXZ));
+    const outer = worldRings[0];
+    if (outer.length < 3) continue;
 
     const seed = projected[0][0].x + projected[0][0].y * 3.3;
     const cat = categorize(f.properties);
-    const height = resolveHeight(f.properties, cat, seed);
+    const eaveH = resolveHeight(f.properties, cat, seed);
 
-    let geom: THREE.ExtrudeGeometry;
-    try {
-      geom = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false, steps: 1 });
-    } catch {
-      continue; // defekte Geometrie überspringen statt crashen
+    // --- Wände (Außenring + Innenhöfe) ---
+    const arr: MeshArrays = { pos: [], uv: [] };
+    for (const ring of worldRings) if (ring.length >= 3) emitWalls(ring, eaveH, arr);
+    const wallVertCount = arr.pos.length / 3;
+
+    // --- Dach ---
+    const o = obb(outer);
+    const shape = roofShape(f.properties, cat, o.fill);
+    const cWorld = new THREE.Vector2(outer.reduce((s, p) => s + p.x, 0) / outer.length, outer.reduce((s, p) => s + p.y, 0) / outer.length);
+    if (shape === "flat") {
+      emitFlatRoof(outer, cWorld, eaveH, arr);
+    } else if (shape === "gabled") {
+      const rh = THREE.MathUtils.clamp(o.hv * Math.tan(THREE.MathUtils.degToRad(34)), 1.6, 5.5);
+      emitGableRoof(o, eaveH, rh, arr);
+    } else {
+      const minHalf = Math.min(o.hu, o.hv);
+      const steep = cat === "worship" ? 1.0 : 0.55; // Kirchturm steiler
+      const rh = THREE.MathUtils.clamp(minHalf * steep, 1.4, cat === "worship" ? 14 : 5);
+      emitHipRoof(outer, cWorld, eaveH, rh, arr);
     }
-    geom.rotateX(-Math.PI / 2); // Footprint-Ebene → XZ, Höhe entlang +Y, Norden → -Z
-    geom.computeVertexNormals();
+    const roofVertCount = arr.pos.length / 3 - wallVertCount;
+    if (wallVertCount + roofVertCount < 3) continue;
 
-    // ExtrudeGeometry hat zwei Material-Gruppen: 0 = Deckel (Dach/Boden), 1 = Seiten (Wand).
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute("position", new THREE.Float32BufferAttribute(arr.pos, 3));
+    geom.setAttribute("uv", new THREE.Float32BufferAttribute(arr.uv, 2));
+    geom.computeVertexNormals();
+    // Materialgruppen: 0 = Dach, 1 = Wand (Reihenfolge wie Material-Array).
+    geom.addGroup(0, wallVertCount, 1);
+    geom.addGroup(wallVertCount, roofVertCount, 0);
+
     const roofMat = new THREE.MeshStandardMaterial({
       color: roofColor(f.properties, cat, seed),
-      roughness: 0.6,
+      roughness: 0.62,
       metalness: 0.05,
+      emissiveMap: tex.black, // Dach glüht nachts NICHT
+      side: THREE.DoubleSide,
     });
+    const plainWall = cat === "outbuilding";
     const wallMat = new THREE.MeshStandardMaterial({
       color: wallColor(f.properties, cat, seed),
-      roughness: 0.88,
+      roughness: 0.9,
       metalness: 0.0,
+      map: plainWall ? null : tex.facade,
+      emissiveMap: plainWall ? tex.black : tex.mask, // nur Fenster leuchten nachts
+      side: THREE.DoubleSide,
     });
 
     const mesh = new THREE.Mesh(geom, [roofMat, wallMat]);
-    // Auf die Geländehöhe des Schwerpunkts setzen (Welt-z = -Nord).
     const c = centroid(projected[0]);
-    mesh.position.y = terrain.sample(c.x, -c.y) - 0.3; // leicht einsenken, kein Schweben
-    // Schatten nur nahe dem Zentrum (Schatten-Frustum) → Performance bei großem Radius.
-    const near = Math.hypot(c.x, c.y) < 900;
+    mesh.position.y = terrain.sample(c.x, -c.y) - 0.3;
+    const near = Math.hypot(c.x, c.y) < 1500;
     mesh.castShadow = near;
     mesh.receiveShadow = near;
-    mesh.userData.info = buildingInfo(f.properties, cat, height);
-    // Nachtbeleuchtung: ~58 % der bewohnbaren Gebäude bekommen warmes Fensterlicht.
-    mesh.userData.lit = cat !== "outbuilding" && hashNoise(seed * 9.4) < 0.58;
-    mesh.userData.glow = new THREE.Color(0, 0, 0); // aktueller Nacht-Emissivwert
+    mesh.userData.info = buildingInfo(f.properties, cat, eaveH);
+    mesh.userData.lit = !plainWall && hashNoise(seed * 9.4) < 0.62;
+    mesh.userData.glow = new THREE.Color(0, 0, 0);
     group.add(mesh);
     meshes.push(mesh);
   }

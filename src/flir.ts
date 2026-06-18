@@ -36,11 +36,13 @@ const ThermalShader = {
       // Vegetation (grün) und Himmel/Wasser (blau) erscheinen kühl = dunkel
       float green = clamp((c.g - max(c.r, c.b)) * 2.5, 0.0, 1.0);
       float blue  = clamp((c.b - max(c.r, c.g)) * 2.0, 0.0, 1.0);
-      float heat = lum * 1.02 - green * 0.28 - blue * 0.34;
-      heat = pow(clamp(heat, 0.0, 1.0), 0.85);
+      // Landschaft anheben: dunkle Luftbild-Texturen über Gamma < 1 aufhellen,
+      // Vegetation/Wasser nur leicht kühlen → dunkle Zombie-Silhouetten bleiben sichtbar.
+      float heat = lum * 1.25 - green * 0.12 - blue * 0.28;
+      heat = pow(clamp(heat, 0.0, 1.0), 0.55);
       float v = mix(1.0 - heat, heat, uWhiteHot);
-      v = clamp((v - 0.5) * 1.12 + 0.5, 0.0, 1.0);          // Kontrast (moderat)
-      v = v * 0.8 + 0.13;                                   // Grundhelligkeit, kein reines Schwarz
+      v = clamp((v - 0.5) * 1.38 + 0.5, 0.0, 1.0);          // höherer Kontrast
+      v = v * 0.9 + 0.12;                                   // hellere Landschaft, kein reines Schwarz
       float n = hash(vUv * uRes + uTime * 60.0);
       v += (n - 0.5) * 0.09;                                // Bildrauschen
       v *= 0.94 + 0.06 * sin(vUv.y * uRes.y * 0.7);         // Scanlines
@@ -63,6 +65,8 @@ const PITCH_MIN = -1.5, PITCH_MAX = 0.25; // Neigung begrenzen
 export class FlirMode {
   enabled = false;
   onToggle?: (enabled: boolean) => void;
+  /** Render-Funktion für den Normalmodus (z. B. Postprocessing). Fallback: direkt. */
+  renderBase?: () => void;
   private composer: EffectComposer;
   private pass: ShaderPass;
   private clock0 = 0;
@@ -191,6 +195,8 @@ export class FlirMode {
       this.pass.uniforms.uTime.value = elapsed;
       this.composer.render();
       this.updateHud(elapsed);
+    } else if (this.renderBase) {
+      this.renderBase();
     } else {
       this.renderer.render(this.scene, this.camera);
     }

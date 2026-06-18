@@ -45,16 +45,16 @@ export function createScene(container: HTMLElement): SceneBundle {
   const sun = new THREE.DirectionalLight(0xfff2d6, 2.1);
   sun.position.set(-380, 560, 260);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(4096, 4096); // höher aufgelöste Schatten
   sun.shadow.camera.near = 50;
-  sun.shadow.camera.far = 2000;
-  const s = 800;
+  sun.shadow.camera.far = 5000;
+  const s = 900;
   sun.shadow.camera.left = -s;
   sun.shadow.camera.right = s;
   sun.shadow.camera.top = s;
   sun.shadow.camera.bottom = -s;
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.5;
+  sun.shadow.bias = -0.0003;
+  sun.shadow.normalBias = 0.6;
   scene.add(sun);
   scene.add(sun.target);
 

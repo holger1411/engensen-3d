@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = join(__dirname, "..", "public", "data");
 
-const GRID = 24; // 24×24 = 576 Stützpunkte
+const GRID = 48; // 48×48 = 2304 Stützpunkte (~150 m Abstand, nahe DEM-Auflösung)
 const API = "https://api.open-meteo.com/v1/elevation";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

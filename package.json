@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "fetch-terrain": "node scripts/fetch-terrain.mjs"
+    "fetch-terrain": "node scripts/fetch-terrain.mjs",
+    "fetch-satellite": "node scripts/fetch-satellite.mjs"
   },
   "dependencies": {
     "three": "^0.169.0"
